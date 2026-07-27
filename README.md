@@ -6,6 +6,11 @@
   </picture>
 </div>
 
+> **Fork notice:** this is jorgeper's fork of
+> [mattpocock/sandcastle](https://github.com/mattpocock/sandcastle).
+> See [README-FORK.md](./README-FORK.md) for every change this fork carries
+> on top of upstream.
+
 ## What Is Sandcastle?
 
 A TypeScript library for orchestrating AI coding agents in isolated sandboxes:

@@ -19,3 +19,19 @@ Default canonical labels. Agent provider support is detailed here. See `docs/age
 ### Domain docs
 
 Single-context layout: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Fork workflow
+
+This repo is jorgeper's fork of mattpocock/sandcastle (`upstream` remote).
+Every change to this fork follows the same pattern:
+
+1. Branch from `main` as `feat/<slug>`.
+2. Implement on that branch following the conventions above (typecheck,
+   tests, changeset, README).
+3. Add a section for the change at the TOP of `README-FORK.md` (newest
+   first): what was added and why, and the `feat/<slug>` branch name. Keep
+   README-FORK.md/fork-doc edits in a separate commit from the feature
+   commits, so the feature commits stay cleanly cherry-pickable for an
+   upstream PR.
+4. Merge the branch to `main` on the fork. Upstream PRs, if proposed, come
+   from the feature branch.
