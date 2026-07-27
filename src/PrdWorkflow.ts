@@ -51,12 +51,22 @@ Turn a feature idea into a committed PRD through a relentless interview.
 ## 1. Interview
 
 If a \`/grilling\` or \`/grill-me\` skill is available, invoke it on the idea.
-Otherwise, do the equivalent yourself: interview the user relentlessly about
-every aspect of the idea until you reach shared understanding. Walk down each
-branch of the decision tree, resolving dependencies between decisions
-one-by-one. Ask questions ONE AT A TIME, each with your recommended answer.
-Look up facts in the repo yourself; only decisions go to the user. Do not
-write the PRD until the user confirms shared understanding.
+
+If neither is available, tell the user those skills come from Matt Pocock's
+skills collection (https://github.com/mattpocock/skills) and offer to
+install it for them. If they say yes, run:
+
+    claude plugin marketplace add mattpocock/skills
+    claude plugin install mattpocock-skills@mattpocock
+
+Newly installed plugin skills may not be visible until the next session, so
+after installing — or if the user declines — conduct the interview yourself
+this time: interview the user relentlessly about every aspect of the idea
+until you reach shared understanding. Walk down each branch of the decision
+tree, resolving dependencies between decisions one-by-one. Ask questions ONE
+AT A TIME, each with your recommended answer. Look up facts in the repo
+yourself; only decisions go to the user. Do not write the PRD until the user
+confirms shared understanding.
 
 ## 2. Write the PRD
 

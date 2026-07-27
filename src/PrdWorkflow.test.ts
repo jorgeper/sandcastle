@@ -28,6 +28,12 @@ describe("scaffoldPrdWorkflow", () => {
     );
     expect(newPrd).toContain("name: new-prd");
     expect(newPrd).toContain("prd/TEMPLATE.md");
+    // When grilling is missing, the skill offers to install Matt Pocock's
+    // skills collection via the non-interactive plugin commands.
+    expect(newPrd).toContain("github.com/mattpocock/skills");
+    expect(newPrd).toContain(
+      "claude plugin install mattpocock-skills@mattpocock",
+    );
 
     const decompose = await readFile(
       join(dir, ".claude", "skills", "decompose-prd", "SKILL.md"),
