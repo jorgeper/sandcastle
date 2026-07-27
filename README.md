@@ -761,6 +761,15 @@ try {
 
 Select a template during `sandcastle init` when prompted, or re-run init in a fresh repo to try a different one.
 
+#### PRD-driven workflow (GitHub Issues only)
+
+With the GitHub Issues tracker, init also scaffolds `prd/TEMPLATE.md` and two Claude Code project skills:
+
+- `/new-prd` — interviews you about a feature idea (via your `/grilling` skill when installed), then writes `prd/NNN-slug.md` and commits it.
+- `/decompose-prd prd/NNN-slug.md` — proposes a breakdown in-session for your approval, then creates one parent issue (never labeled) plus N ≥ 1 sub-issues labeled `Sandcastle` with acceptance criteria, `Blocked by` edges, and `**Parent:** / **PRD:**` body lines. The label on children is the release gate; the planner stages dependent issues across merge rounds automatically.
+
+Existing files are never overwritten, and nothing is scaffolded if you decline the `Sandcastle` label. See `prd/001-prd-driven-workflow.md` in this repo for the design.
+
 ## CLI commands
 
 ### `sandcastle init`
