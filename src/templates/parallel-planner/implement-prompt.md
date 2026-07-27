@@ -2,7 +2,7 @@
 
 Fix issue {{TASK_ID}}: {{ISSUE_TITLE}}
 
-Pull in the issue using `{{VIEW_TASK_COMMAND}}`. If it has a parent PRD, pull that in too.
+Pull in the issue using `{{VIEW_TASK_COMMAND}}`. If the issue body has a `**PRD:**` line, read that file from the repo — it is the product spec for this work. If it has a `**Parent:** #<ID>` line, view the parent issue too for feature-level context.
 
 Only work on the issue specified.
 
