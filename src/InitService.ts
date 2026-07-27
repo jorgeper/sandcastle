@@ -2,6 +2,7 @@ import { FileSystem } from "@effect/platform";
 import { Effect } from "effect";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { scaffoldPrdWorkflow } from "./PrdWorkflow.js";
 import { SANDBOX_REPO_DIR } from "./SandboxFactory.js";
 
 const GITIGNORE = `.env
@@ -1098,6 +1099,18 @@ export const scaffold = (
     // Strip --label Sandcastle from prompt files when the user declined label creation
     if (!createLabel) {
       yield* rewritePromptFiles(configDir);
+    }
+
+    // PRD-driven workflow (prd/001-prd-driven-workflow.md): scaffold the prd/
+    // template and the /new-prd + /decompose-prd project skills. GitHub-only
+    // (sub-issues are a GitHub feature) and label-gated (the Sandcastle label
+    // is the workflow's release gate).
+    if (
+      templateName === "parallel-planner-with-review" &&
+      issueTracker.name === "github-issues" &&
+      createLabel
+    ) {
+      yield* scaffoldPrdWorkflow(repoDir);
     }
 
     // For the custom issue tracker, drop the setup prompt the user feeds to

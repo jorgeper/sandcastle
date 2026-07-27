@@ -1318,6 +1318,61 @@ describe("InitService scaffold", () => {
     });
   });
 
+  describe("PRD workflow scaffold", () => {
+    const exists = async (path: string) => {
+      try {
+        await readFile(path, "utf-8");
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    it("scaffolds prd/TEMPLATE.md and both skills for parallel-planner-with-review + github-issues", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, { templateName: "parallel-planner-with-review" });
+
+      expect(await exists(join(dir, "prd", "TEMPLATE.md"))).toBe(true);
+      const newPrd = await readFile(
+        join(dir, ".claude", "skills", "new-prd", "SKILL.md"),
+        "utf-8",
+      );
+      expect(newPrd).toContain("name: new-prd");
+      const decompose = await readFile(
+        join(dir, ".claude", "skills", "decompose-prd", "SKILL.md"),
+        "utf-8",
+      );
+      expect(decompose).toContain("--label Sandcastle");
+    });
+
+    it("does not scaffold for other templates", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, { templateName: "simple-loop" });
+      expect(await exists(join(dir, "prd", "TEMPLATE.md"))).toBe(false);
+      expect(
+        await exists(join(dir, ".claude", "skills", "new-prd", "SKILL.md")),
+      ).toBe(false);
+    });
+
+    it("does not scaffold for non-github issue trackers", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-with-review",
+        issueTracker: getIssueTracker("beads")!,
+      });
+      expect(await exists(join(dir, "prd", "TEMPLATE.md"))).toBe(false);
+    });
+
+    it("does not scaffold when the user declined the Sandcastle label", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-with-review",
+        createLabel: false,
+      });
+      expect(await exists(join(dir, "prd", "TEMPLATE.md"))).toBe(false);
+    });
+  });
+
   // --- Issue tracker ---
 
   describe("Issue tracker registry", () => {
