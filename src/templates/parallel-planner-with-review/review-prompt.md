@@ -52,4 +52,12 @@ If you find improvements to make:
 
 If the code is already clean and well-structured, do nothing.
 
+# RECORD
+
+Before finishing, leave a single comment on issue {{TASK_ID}} recording the review outcome, using:
+
+`{{COMMENT_TASK_COMMAND}}`
+
+Lead the comment with `🏰 **Sandcastle · Reviewer** — {{BRANCH}}`, then keep it concise: either **Changed:** what you refined and why, or **Reviewed — no changes needed.** Post this comment **before** you output the completion signal.
+
 Once complete, output <promise>COMPLETE</promise>.

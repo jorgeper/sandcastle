@@ -487,6 +487,7 @@ export interface IssueTrackerEntry {
   readonly templateArgs: {
     readonly LIST_TASKS_COMMAND: string;
     readonly VIEW_TASK_COMMAND: string;
+    readonly COMMENT_TASK_COMMAND: string;
     readonly CLOSE_TASK_COMMAND: string;
     readonly ISSUE_TRACKER_TOOLS: string;
   };
@@ -522,6 +523,7 @@ RUN corepack enable`;
 // shared constants so the registry entry and the setup doc stay in sync.
 const CUSTOM_LIST_TASKS_SENTINEL = `echo 'No issue tracker configured — run ${SETUP_ISSUE_TRACKER_PATH} through your coding agent.' >&2; exit 1`;
 const CUSTOM_VIEW_TASK_MARKER = `<view command — see ${SETUP_ISSUE_TRACKER_PATH}>`;
+const CUSTOM_COMMENT_TASK_MARKER = `<comment command — see ${SETUP_ISSUE_TRACKER_PATH}>`;
 const CUSTOM_CLOSE_TASK_MARKER = `<close command — see ${SETUP_ISSUE_TRACKER_PATH}>`;
 const CUSTOM_TRACKER_TOOLS = `# TODO: install your issue tracker's CLI here. See ${SETUP_ISSUE_TRACKER_PATH}`;
 const CUSTOM_ENV_EXAMPLE = `# TODO: add any env vars your issue tracker needs (e.g. an API token).
@@ -534,6 +536,7 @@ const ISSUE_TRACKER_REGISTRY: IssueTrackerEntry[] = [
     templateArgs: {
       LIST_TASKS_COMMAND: `gh issue list --state open --label Sandcastle --limit 100 --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`,
       VIEW_TASK_COMMAND: "gh issue view <ID>",
+      COMMENT_TASK_COMMAND: `gh issue comment <ID> --body "<BODY>"`,
       CLOSE_TASK_COMMAND: `gh issue close <ID> --comment "Completed by Sandcastle"`,
       ISSUE_TRACKER_TOOLS: GITHUB_CLI_TOOLS,
     },
@@ -548,6 +551,9 @@ GH_TOKEN=`,
     templateArgs: {
       LIST_TASKS_COMMAND: "bd ready --json",
       VIEW_TASK_COMMAND: "bd show <ID>",
+      // Beads keeps comments as a discussion thread separate from `bd update`.
+      // Verify the flag against your installed beads version if commenting fails.
+      COMMENT_TASK_COMMAND: `bd comments add <ID> "<BODY>"`,
       CLOSE_TASK_COMMAND: `bd close <ID> --reason="Completed by Sandcastle"`,
       ISSUE_TRACKER_TOOLS: BEADS_TOOLS,
     },
@@ -563,6 +569,7 @@ GH_TOKEN=`,
       LIST_TASKS_COMMAND: CUSTOM_LIST_TASKS_SENTINEL,
       // Inline text markers — replaced by the setup agent, never executed.
       VIEW_TASK_COMMAND: CUSTOM_VIEW_TASK_MARKER,
+      COMMENT_TASK_COMMAND: CUSTOM_COMMENT_TASK_MARKER,
       CLOSE_TASK_COMMAND: CUSTOM_CLOSE_TASK_MARKER,
       ISSUE_TRACKER_TOOLS: CUSTOM_TRACKER_TOOLS,
     },
@@ -922,7 +929,7 @@ You are a coding agent. Finish wiring up the **custom issue tracker** for this S
 
 ## Goal
 
-Wire up the issue tracker so the scaffolded prompts can **list**, **view**, and **close** tasks. There is no runtime abstraction to implement — the tracker commands are baked into the scaffolded files, so you edit those files **in place**.
+Wire up the issue tracker so the scaffolded prompts can **list**, **view**, **comment on**, and **close** tasks. There is no runtime abstraction to implement — the tracker commands are baked into the scaffolded files, so you edit those files **in place**.
 
 ## 1. Interview the user
 
@@ -937,6 +944,7 @@ Work out, together with the user, the shell commands for:
 
 - **list** — print all open tasks **as JSON** (match the shape the built-in trackers emit: an array of objects, each with at least an id/number, title, and body). This is what the agent reads at the start of every iteration.
 - **view** \`<ID>\` — show a single task by id.
+- **comment** \`<ID>\` — append a comment to a single task by id. The agents use this to leave an audit trail of what they did; the comment text is substituted for a \`<BODY>\` placeholder.
 - **close** \`<ID>\` — close a single task by id.
 
 ## 3. Edit the scaffolded files in place
@@ -955,7 +963,7 @@ Work out, together with the user, the shell commands for:
   ${CUSTOM_LIST_TASKS_SENTINEL}
   \`\`\`
 
-  with your **list** command. In the prompt file the sentinel sits inside a Sandcastle **shell expression** — a leading \`!\` followed by the command in backticks — whose output is injected into the prompt before each run. Keep that \`!\` and the surrounding backticks; replace only the command between them, and **remove the \`exit 1\`** (leaving it keeps every run hard-failing). Then replace the \`${CUSTOM_VIEW_TASK_MARKER}\` and \`${CUSTOM_CLOSE_TASK_MARKER}\` markers with your **view** and **close** commands.
+  with your **list** command. In the prompt file the sentinel sits inside a Sandcastle **shell expression** — a leading \`!\` followed by the command in backticks — whose output is injected into the prompt before each run. Keep that \`!\` and the surrounding backticks; replace only the command between them, and **remove the \`exit 1\`** (leaving it keeps every run hard-failing). Then replace the \`${CUSTOM_VIEW_TASK_MARKER}\`, \`${CUSTOM_COMMENT_TASK_MARKER}\`, and \`${CUSTOM_CLOSE_TASK_MARKER}\` markers with your **view**, **comment**, and **close** commands.
 
 - **\`.env.example\`** — replace the \`# TODO\` block with the real env var(s) your tracker needs, then tell the user to set them in \`.sandcastle/.env\`.
 

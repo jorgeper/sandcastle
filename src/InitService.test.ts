@@ -1340,6 +1340,9 @@ describe("InitService scaffold", () => {
       expect(manager!.templateArgs.VIEW_TASK_COMMAND).toContain(
         "gh issue view",
       );
+      expect(manager!.templateArgs.COMMENT_TASK_COMMAND).toContain(
+        "gh issue comment",
+      );
       expect(manager!.templateArgs.CLOSE_TASK_COMMAND).toContain(
         "gh issue close",
       );
@@ -1353,6 +1356,9 @@ describe("InitService scaffold", () => {
       expect(manager!.label).toBe("Beads");
       expect(manager!.templateArgs.LIST_TASKS_COMMAND).toBe("bd ready --json");
       expect(manager!.templateArgs.VIEW_TASK_COMMAND).toContain("bd show");
+      expect(manager!.templateArgs.COMMENT_TASK_COMMAND).toContain(
+        "bd comments add",
+      );
       expect(manager!.templateArgs.CLOSE_TASK_COMMAND).toContain("bd close");
       expect(manager!.templateArgs.CLOSE_TASK_COMMAND).toContain("--reason=");
       expect(manager!.templateArgs.ISSUE_TRACKER_TOOLS).toContain("beads");
@@ -1380,9 +1386,15 @@ describe("InitService scaffold", () => {
         "SETUP_ISSUE_TRACKER.md",
       );
       expect(manager!.templateArgs.LIST_TASKS_COMMAND).toContain(">&2");
-      // View/close are inline text markers, not runnable commands.
+      // View/comment/close are inline text markers, not runnable commands.
       expect(manager!.templateArgs.VIEW_TASK_COMMAND).toContain("view command");
       expect(manager!.templateArgs.VIEW_TASK_COMMAND).toContain(
+        "SETUP_ISSUE_TRACKER.md",
+      );
+      expect(manager!.templateArgs.COMMENT_TASK_COMMAND).toContain(
+        "comment command",
+      );
+      expect(manager!.templateArgs.COMMENT_TASK_COMMAND).toContain(
         "SETUP_ISSUE_TRACKER.md",
       );
       expect(manager!.templateArgs.CLOSE_TASK_COMMAND).toContain(

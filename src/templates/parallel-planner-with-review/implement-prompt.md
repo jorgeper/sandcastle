@@ -51,7 +51,19 @@ Keep it concise.
 
 # THE ISSUE
 
-If the task is not complete, leave a comment on the issue with what was done.
+When the task is complete, leave a single comment on the issue recording what this run did, using:
+
+`{{COMMENT_TASK_COMMAND}}`
+
+Lead the comment with `🏰 **Sandcastle · Implementer** — {{BRANCH}}`, then keep it concise:
+
+- **Done:** what was built
+- **Decisions:** key choices made
+- **Files:** files changed
+
+Post this comment **before** you output the completion signal, so the trace is recorded even if the process exits immediately after.
+
+If you cannot complete the task because of a genuine blocker, leave one comment describing the blocker and what remains, and do **not** output the completion signal — the next iteration will continue. Do not post a comment for routine "more work needed next iteration" handoff; that belongs in the commit message.
 
 Do not close the issue - this will be done later.
 

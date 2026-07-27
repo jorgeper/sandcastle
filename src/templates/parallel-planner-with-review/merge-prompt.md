@@ -15,7 +15,16 @@ After all branches are merged, make a single commit summarizing the merge.
 
 # CLOSE ISSUES
 
-For each branch that was merged, close its issue using the following command:
+For each branch that was merged, first leave a single comment on its issue recording the merge, using:
+
+`{{COMMENT_TASK_COMMAND}}`
+
+Lead the comment with `🏰 **Sandcastle · Merger**`, then keep it concise:
+
+- **Merged:** `<branch>` → the current branch
+- **Tests:** the result of `npm run typecheck` and `npm run test`
+
+Then close the issue using the following command:
 
 `{{CLOSE_TASK_COMMAND}}`
 
