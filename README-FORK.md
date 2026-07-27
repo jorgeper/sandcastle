@@ -6,6 +6,18 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## /new-prd offers to install grilling skills (`feat/new-prd-grilling-install`)
+
+Follow-up to the PRD-driven workflow: when no `/grilling` or `/grill-me`
+skill is installed, the scaffolded `/new-prd` skill now tells the user those
+come from [mattpocock/skills](https://github.com/mattpocock/skills) and
+offers to install the collection for them — running the non-interactive
+Claude Code plugin commands (`claude plugin marketplace add mattpocock/skills`
+
+- `claude plugin install mattpocock-skills@mattpocock`) on a yes. Since
+  plugin skills may not be visible until the next session, the skill still
+  conducts the interview inline this time either way.
+
 ## PRD-driven workflow (`feat/prd-integration`)
 
 Adds the missing front half of the pipeline: a defined path from _idea_ to
