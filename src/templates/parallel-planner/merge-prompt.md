@@ -21,7 +21,7 @@ For each branch that was merged, close its issue using the following command:
 
 # CLOSE FINISHED PARENTS
 
-After closing an issue, check its body for a `**Parent:** #<ID>` line. If present, view that parent with `{{VIEW_TASK_COMMAND}}`. If every one of the parent's sub-issues is now closed, close the parent too using `{{CLOSE_TASK_COMMAND}}`, with a comment noting that all sub-issues are complete. If the issue has no `**Parent:**` line, skip this step.
+After closing an issue, check its body for a `**Parent:** #<ID>` line. If present, use your issue tracker's tools to search for any OTHER open issues whose body also contains `**Parent:** #<ID>` — that body line is how sub-issues are marked. Viewing the parent alone with `{{VIEW_TASK_COMMAND}}` will not show its sub-issues, and the `{{ISSUES}}` list below is not sufficient either, since sub-issues created without the `Sandcastle` label are invisible to this run. Only if that search turns up no other open sub-issues, close the parent too using `{{CLOSE_TASK_COMMAND}}`, with a comment noting that all sub-issues are complete. If you cannot verify that no open sub-issues remain, leave the parent open rather than closing it. If the issue has no `**Parent:**` line, skip this step.
 
 Here are all the issues:
 
