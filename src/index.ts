@@ -52,7 +52,7 @@ export type {
   OutputStringDefinition,
 } from "./Output.js";
 export { CwdError } from "./CwdError.js";
-export { GoalNotSupportedError } from "./errors.js";
+export { GoalNotSupportedError } from "./GoalNotSupportedError.js";
 export {
   claudeCode,
   codex,
