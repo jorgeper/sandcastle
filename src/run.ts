@@ -815,6 +815,7 @@ export async function run(
         ...resumeOptions,
         prompt,
         promptFile: undefined,
+        promptArgs: undefined,
         maxIterations: 1,
         resumeSession: lastIteration.sessionId,
       });
@@ -832,6 +833,7 @@ export async function run(
         ...forkOptions,
         prompt,
         promptFile: undefined,
+        promptArgs: undefined,
         maxIterations: 1,
         resumeSession: lastIteration.sessionId,
         forkSession: true,

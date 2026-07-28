@@ -655,6 +655,124 @@ describe("createSandbox", () => {
     }
   });
 
+  it("sandbox.run().resume()/.fork() succeed after a promptFile + promptArgs run (regression: promptArgs leaked into the inline resume prompt)", async () => {
+    const hostDir = await mkdtemp(join(tmpdir(), "sandbox-resume-args-"));
+    const hostProjectsDir = await mkdtemp(
+      join(tmpdir(), "sandbox-resume-args-host-projects-"),
+    );
+    const sandboxProjectsDir = await mkdtemp(
+      join(tmpdir(), "sandbox-resume-args-sb-projects-"),
+    );
+    await initRepo(hostDir);
+    await commitFile(hostDir, "init.txt", "init", "initial commit");
+    const promptFilePath = join(hostDir, "task-prompt.md");
+    await writeFile(promptFilePath, "Implement task {{TASK_ID}}.");
+    const mockSessionId = "resume-args-session-1";
+    const sandboxBaseDir = mkdtempSync(
+      join(tmpdir(), "sandbox-resume-args-sb-"),
+    );
+
+    const fakeHandle: BindMountSandboxHandle = {
+      worktreePath: sandboxBaseDir,
+      exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+      copyFileIn: async (hostPath, sandboxPath) => {
+        await mkdir(dirname(sandboxPath), { recursive: true });
+        await copyFile(hostPath, sandboxPath);
+      },
+      copyFileOut: async (sandboxPath, hostPath) => {
+        await mkdir(dirname(hostPath), { recursive: true });
+        await copyFile(sandboxPath, hostPath);
+      },
+      close: async () => {},
+    };
+
+    // Same mock agent as the resume-flow test above: writes a session JSONL
+    // on every call so capture and resume both find the session.
+    const buildSandbox = (sandboxDir: string): SandboxService => {
+      const real = makeLocalSandbox(sandboxDir);
+      return {
+        exec: (command, options) => {
+          if (command.startsWith("claude ") && options?.onLine) {
+            const onLine = options.onLine;
+            return Effect.gen(function* () {
+              const cwd = options?.cwd ?? sandboxDir;
+              const encoded = encodeProjectPath(cwd);
+              const sessionsDir = join(sandboxProjectsDir, encoded);
+              yield* Effect.promise(async () => {
+                await mkdir(sessionsDir, { recursive: true });
+                await writeFile(
+                  join(sessionsDir, `${mockSessionId}.jsonl`),
+                  JSON.stringify({
+                    type: "system",
+                    subtype: "init",
+                    session_id: mockSessionId,
+                    cwd,
+                  }),
+                );
+              });
+              const streamLines = [
+                JSON.stringify({
+                  type: "system",
+                  subtype: "init",
+                  session_id: mockSessionId,
+                }),
+                JSON.stringify({
+                  type: "assistant",
+                  message: { content: [{ type: "text", text: "ok" }] },
+                }),
+                JSON.stringify({ type: "result", result: "ok" }),
+              ].join("\n");
+              for (const line of streamLines.split("\n")) {
+                onLine(line);
+              }
+              return { stdout: streamLines, stderr: "", exitCode: 0 };
+            });
+          }
+          return real.exec(command, options);
+        },
+        copyIn: (hostPath, sandboxPath) => real.copyIn(hostPath, sandboxPath),
+        copyFileOut: (sandboxPath, hostPath) =>
+          real.copyFileOut(sandboxPath, hostPath),
+      };
+    };
+
+    const sandbox = await createSandbox({
+      branch: "resume-args-flow",
+      sandbox: testSandbox,
+      cwd: hostDir,
+      _test: {
+        buildSandbox,
+        bindMountHandle: fakeHandle,
+      },
+    });
+
+    try {
+      const first = await sandbox.run({
+        agent: claudeCode("test-model", {
+          sessionStorage: { hostProjectsDir, sandboxProjectsDir },
+        }),
+        promptFile: promptFilePath,
+        promptArgs: { TASK_ID: "42" },
+        maxIterations: 1,
+      });
+
+      expect(typeof first.resume).toBe("function");
+
+      // Both must not reject with "promptArgs is only supported with promptFile".
+      const resumed = await first.resume!("now write the PR description");
+      expect(resumed.iterations.length).toBe(1);
+
+      const forked = await first.fork!("summarize the work");
+      expect(forked.iterations.length).toBe(1);
+    } finally {
+      await sandbox.close();
+      await rm(hostDir, { recursive: true, force: true });
+      await rm(hostProjectsDir, { recursive: true, force: true });
+      await rm(sandboxProjectsDir, { recursive: true, force: true });
+      await rm(sandboxBaseDir, { recursive: true, force: true });
+    }
+  });
+
   it("sandbox.run() appends raw stdout to the same log file when logging.verbose is true", async () => {
     const hostDir = await mkdtemp(join(tmpdir(), "sandbox-verbose-"));
     await initRepo(hostDir);

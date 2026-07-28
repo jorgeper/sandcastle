@@ -1502,4 +1502,47 @@ describe("output.maxRetries end-to-end", () => {
       }),
     ).rejects.toBeInstanceOf(StructuredOutputError);
   });
+
+  it("resume()/fork() succeed after a promptFile + promptArgs run (regression: promptArgs leaked into the inline resume prompt)", async () => {
+    const hostProjectsDir = mkdtempSync(
+      join(tmpdir(), "sandcastle-resume-args-"),
+    );
+    const sessionId = "sess-resume-args-1";
+    seedSessionFile(hostProjectsDir, process.cwd(), sessionId);
+    const promptDir = mkdtempSync(
+      join(tmpdir(), "sandcastle-resume-args-prompt-"),
+    );
+    const promptFilePath = join(promptDir, "task-prompt.md");
+    writeFileSync(promptFilePath, "Implement task {{TASK_ID}}.");
+
+    const stage = [
+      `{"type":"system","subtype":"init","session_id":"${sessionId}"}`,
+      '{"type":"result","result":"ok"}',
+    ];
+    const sandbox = stagedAgentSandbox([stage, stage, stage]);
+
+    try {
+      const first = await run({
+        agent: claudeCode("claude-opus-4-8", {
+          captureSessions: false,
+          sessionStorage: { hostProjectsDir },
+        }),
+        sandbox,
+        promptFile: promptFilePath,
+        promptArgs: { TASK_ID: "42" },
+        branchStrategy: { type: "head" },
+      });
+      expect(typeof first.resume).toBe("function");
+
+      // Both must not reject with "promptArgs is only supported with promptFile".
+      const resumed = await first.resume!("now write the PR description");
+      expect(resumed.iterations.length).toBe(1);
+
+      const forked = await first.fork!("summarize the work");
+      expect(forked.iterations.length).toBe(1);
+    } finally {
+      rmSync(hostProjectsDir, { recursive: true, force: true });
+      rmSync(promptDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -940,6 +940,7 @@ Constraints:
 - The provider's host session file must exist (throws before sandbox creation).
 - Only iteration 1 receives the resume flag; subsequent iterations (if any) start fresh.
 - Providers without resume support reject `resumeSession`.
+- `.resume()` and `.fork()` run the new prompt inline: the original run's `promptFile` and `promptArgs` are dropped, not re-applied. Interpolate any values directly into the prompt string.
 
 ### Session fork
 
