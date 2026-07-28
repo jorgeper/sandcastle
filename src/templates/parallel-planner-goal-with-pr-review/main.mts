@@ -89,8 +89,22 @@ const specSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// Configuration
+// Configuration — every knob for this template, in one place
 // ---------------------------------------------------------------------------
+
+// Repo-relative directory where per-issue specs are committed. Rename to
+// "prd", "docs/specs", etc. — the spec writer, goal statements, and issue
+// comments all follow it. Specs land at `<SPEC_DIR>/issue-<n>.md`.
+const SPEC_DIR = "specs";
+
+// Inner turn bound for each implementer attempt: "or stop after N turns" is
+// appended to the goal so a stalled attempt ends and the next fresh-context
+// attempt takes over instead of spinning forever.
+const GOAL_MAX_TURNS = 25;
+
+// Outer fresh-context attempts per issue (`maxIterations` of the goal run).
+// Each attempt is a full autonomous /goal session, so keep this small.
+const IMPLEMENT_ATTEMPTS = 4;
 
 // Maximum number of classify→plan→execute→merge cycles before stopping.
 const MAX_ITERATIONS = 10;
@@ -103,7 +117,22 @@ const MAX_DEBATE_ROUNDS = 3;
 // reviewer + local merge.
 const PR_LABEL = github.REQUIRE_PR_LABEL;
 
+// The branch merges target and PRs diff against.
 const TARGET_BRANCH = "master";
+
+// When true, PR/issue markers carry full provenance: **[agent · harness ·
+// model]**. Set false for plain **[agent]** markers. Turn-taking parses the
+// agent name either way.
+const MARKER_DETAIL = true;
+
+// When true (default), PR descriptions include a commit-by-commit
+// walkthrough so the owner never has to click into individual commits.
+// False keeps the tighter what/why summary — fewer pr-writer tokens.
+const PR_SUMMARY_DETAILED = true;
+
+// Models are deliberately NOT configured here: each agent's harness and
+// model are declared inline at its sandbox.run()/run() call site, so any
+// agent can run a different model (or harness) by editing that one spot.
 
 const branchFor = (issueNumber: number) => `sandcastle/issue-${issueNumber}`;
 
@@ -124,11 +153,6 @@ const copyToWorktree = ["node_modules"];
 // inline at its sandbox.run() call site, so any agent can run a different
 // model (or harness) by editing that one spot. Pass the same values to
 // markerFor so the marker can never drift from what actually ran.
-
-// When true, PR markers carry full provenance: **[agent · harness · model]**.
-// Set false for plain **[agent]** markers. Turn-taking parses the agent name
-// either way.
-const MARKER_DETAIL = true;
 
 // Every action an agent performs on a PR (opening it, commenting, replying)
 // is attributed with this marker, like a signature on behalf of the owner.
@@ -166,11 +190,6 @@ const ensurePrInfra = async () => {
 // ---------------------------------------------------------------------------
 // PR-mode helpers
 // ---------------------------------------------------------------------------
-
-// When true (default), PR descriptions include a commit-by-commit walkthrough
-// so the owner never has to click into individual commits. False keeps the
-// tighter what/why summary — fewer pr-writer tokens.
-const PR_SUMMARY_DETAILED = true;
 
 // Resumed against the implementer's own session, so it writes from memory of
 // the work — like a human describing the branch they just finished. Inline
@@ -548,21 +567,31 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       });
 
       try {
+        const isPrMode = prLabelByNumber.get(Number(issue.id)) === true;
+
         // Spec step: distill the issue into a committed spec + goal statement.
-        // Idempotent — if the issue already links a spec that exists on the
-        // branch, the writer recovers the goal from the file instead of
-        // regenerating. The committed file is the durable source of truth;
-        // the <spec> tag just hands the statement to this script (extractTag
-        // pattern, like the pr-writer — sandbox.run has no structured output).
+        // The writer acts like the implementer — its own RALPH: commit and
+        // its own 🏰 issue comment (with a clickable link to the spec); it
+        // never edits the issue body. Idempotent: if the spec file already
+        // exists on the branch, the goal is recovered from its `## Goal`
+        // section and no duplicate comment is posted. The committed file is
+        // the durable source of truth; the <spec> tag just hands the
+        // statement to this script (extractTag pattern, like the pr-writer —
+        // sandbox.run has no structured output).
+        const specModel = "claude-opus-4-8";
+        const specPath = `${SPEC_DIR}/issue-${issue.id}.md`;
         const specRun = await sandbox.run({
           name: "spec-writer",
           maxIterations: 1,
-          agent: sandcastle.claudeCode("claude-opus-4-8"),
+          agent: sandcastle.claudeCode(specModel),
           promptFile: "./.sandcastle/spec-prompt.md",
           promptArgs: {
             TASK_ID: issue.id,
             ISSUE_TITLE: issue.title,
             BRANCH: issue.branch,
+            SPEC_PATH: specPath,
+            REPO: await github.repoSlug(),
+            AGENT_MARKER: markerFor("spec-writer", "claude-code", specModel),
           },
           completionSignal: "</spec>",
         });
@@ -575,6 +604,12 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         const spec = specSchema.parse(JSON.parse(specJson));
         console.log(`  #${issue.id}: spec at ${spec.specPath}`);
 
+        // Push the spec commit right away (PR mode) so the SHA-pinned link
+        // in the spec-writer's issue comment resolves immediately.
+        if (isPrMode) {
+          await pushBranch(sandbox.worktreePath, issue.branch);
+        }
+
         // Implementer in goal mode: the inner /goal turn loop works and
         // self-verifies (judge checks the condition after every turn); the
         // outer iterations are fresh-context retries that continue from git
@@ -583,8 +618,8 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         const implement = await sandbox.run({
           name: "implementer",
           goal: spec.goal,
-          goalMaxTurns: 25,
-          maxIterations: 4,
+          goalMaxTurns: GOAL_MAX_TURNS,
+          maxIterations: IMPLEMENT_ATTEMPTS,
           agent: sandcastle.claudeCode(implementerModel),
         });
 
@@ -598,8 +633,6 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           return { ...implement, commits: [] };
         }
         if (implement.commits.length === 0) return implement;
-
-        const isPrMode = prLabelByNumber.get(Number(issue.id)) === true;
 
         if (!isPrMode) {
           // Legacy path — inner reviewer commits directly, merger merges later.

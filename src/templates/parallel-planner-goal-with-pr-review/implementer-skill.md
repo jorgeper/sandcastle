@@ -5,9 +5,10 @@ description: Process rules for Sandcastle implementer agents working a goal agai
 
 # Sandcastle implementer process rules
 
-You are working toward a goal that references a spec file
-(`specs/issue-<n>.md`). Read the spec first, then the issue it names (via
-`gh issue view <n>`), then any `**PRD:**` file the issue references.
+You are working toward a goal that references a committed spec file (the
+goal statement names its path). Read the spec first, then the issue it
+names (via `gh issue view <n>`), then any `**PRD:**` file the issue
+references.
 
 ## Scope
 
