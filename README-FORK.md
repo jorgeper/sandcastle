@@ -6,6 +6,21 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Fix: resume()/fork() leaked promptArgs into the inline resume prompt (`feat/resume-strip-prompt-args`)
+
+`RunResult.resume()`/`.fork()` (and their `sandbox.run()` counterparts)
+build the follow-up run by spreading the original run's options and
+swapping in an inline prompt. Only `promptFile` was cleared — the leftover
+`promptArgs` tripped the "promptArgs is only supported with promptFile"
+validation, so every resume/fork after a `promptFile` + `promptArgs` run
+rejected before the agent started. In the `parallel-planner-with-pr-review`
+template this silently downgraded every PR description to the two-line
+fallback: the pr-writer resume (which reuses the implementer's session)
+could never run. All four builders now drop `promptArgs` alongside
+`promptFile`, matching what the structured-output retry path already did.
+Regression tests cover both the `createSandbox` and `run` flows; README
+notes the drop-semantics under Session resume.
+
 ## PR checkpoint with agent review debate (`feat/pr-checkpoint`)
 
 Adds a sixth template, `parallel-planner-with-pr-review`, that puts a human
