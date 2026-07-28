@@ -1318,6 +1318,84 @@ describe("InitService scaffold", () => {
     });
   });
 
+  describe("parallel-planner-goal-with-pr-review template", () => {
+    it("appears in listTemplates()", () => {
+      const templates = listTemplates();
+      expect(
+        templates.some(
+          (t) => t.name === "parallel-planner-goal-with-pr-review",
+        ),
+      ).toBe(true);
+    });
+
+    it("scaffolds the spec prompt with structured output tag and idempotency check", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+
+      const prompt = await readFile(
+        join(dir, ".sandcastle", "spec-prompt.md"),
+        "utf-8",
+      );
+      // Structured output: run() validates the opening tag appears literally.
+      expect(prompt).toContain("<spec>");
+      // Idempotency: existing spec link + file on branch → recover, not regenerate.
+      expect(prompt).toContain("IDEMPOTENCY CHECK");
+      expect(prompt).toContain("**Spec:**");
+      // Criteria phrased as observable end states, the rule idempotency rests on.
+      expect(prompt).toContain("Observable end states, not actions");
+    });
+
+    it("main.mts runs the implementer in goal mode, not via implement-prompt", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      expect(mainTs).toContain("goal: spec.goal");
+      expect(mainTs).toContain("goalMaxTurns");
+      expect(mainTs).toContain("goalMet");
+      expect(mainTs).not.toContain("implement-prompt.md");
+    });
+
+    it("does not scaffold implement-prompt.md (goal mode has no implementer prompt)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+
+      await expect(
+        readFile(join(dir, ".sandcastle", "implement-prompt.md"), "utf-8"),
+      ).rejects.toThrow();
+    });
+
+    it("ships the implementer process-rules skill and scaffolds it in setup", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+
+      const skill = await readFile(
+        join(dir, ".sandcastle", "implementer-skill.md"),
+        "utf-8",
+      );
+      expect(skill).toContain("name: sandcastle-implementer");
+      expect(skill).toContain("RALPH:");
+
+      const setup = await readFile(
+        join(dir, ".sandcastle", "setup.mts"),
+        "utf-8",
+      );
+      expect(setup).toContain(".claude/skills/sandcastle-implementer/SKILL.md");
+      expect(setup).toContain("scaffoldImplementerSkill");
+    });
+  });
+
   describe("PRD workflow scaffold", () => {
     const exists = async (path: string) => {
       try {
