@@ -6,6 +6,46 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## PR checkpoint with agent review debate (`feat/pr-checkpoint`)
+
+Adds a sixth template, `parallel-planner-with-pr-review`, that puts a human
+checkpoint between implementation and merge. Upstream's review happens
+inside the pipeline (the inner reviewer commits directly and the merger
+lands everything); this template moves the review _onto a GitHub PR_ so the
+owner reads a conversation, not a diff, and nothing merges without their
+say-so.
+
+**What was added**
+
+- Issues labeled `sandcastle:require-pr` (alongside `sandcastle`) publish a
+  PR instead of using the inner reviewer. The PR description is written by
+  the implementer's own resumed session — what/why, commit walkthrough, key
+  decisions (`PR_SUMMARY_DETAILED` const) — with all branch commits kept.
+- An outer `pr-reviewer` ⇄ `addresser` debate runs in the PR's review
+  threads (up to `MAX_DEBATE_ROUNDS` reviewer turns), deadlocks escalating
+  as `⚠️ NEEDS-DECISION` threads the owner arbitrates. Everything runs as
+  the owner's single identity; each agent action carries a
+  `**[agent · harness · model]**` marker, and unmarked comments (the human)
+  route back to the addresser. Turn-taking, thread states, and the merge
+  gate are pure, unit-tested code (34 tests) — not prompt interpretation.
+- The merge gate: owner adds the `sandcastle:approved` label + zero
+  unresolved threads → orchestrator squash-merges, deletes the branch, and
+  closes the issue explicitly (no reliance on async `Closes #N`).
+  GitHub-native approvals are unusable here (authors can't approve their
+  own PRs), hence the label.
+- Label vocabulary namespaced under `sandcastle`/`sandcastle:*` with an
+  ownership rule: `main.mts --init` provisions human-applied labels;
+  orchestrator-applied status labels self-create at point of use. `--doctor`
+  checks env/tokens/docker image/labels; `--help` documents it all.
+- Repo-level enablement: `allowImportingTsExtensions` +
+  `rewriteRelativeImportExtensions` in tsconfig and a vitest include for
+  `.test.mts`, since the template ships helper modules + tests beside
+  `main.mts` (flat, because init's template copy is non-recursive). This
+  stretches ADR 0009's letter — the directory is still the self-contained
+  unit — worth revisiting before an upstream PR.
+
+Spec: `prd/002-pr-checkpoint.md` (same branch).
+
 ## /new-prd offers to install grilling skills (`feat/new-prd-grilling-install`)
 
 Follow-up to the PRD-driven workflow: when no `/grilling` or `/grill-me`
