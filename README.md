@@ -754,15 +754,16 @@ try {
 
 ### Templates
 
-`sandcastle init` prompts you to choose a sandbox provider (Docker or Podman), an issue tracker (GitHub Issues, Beads, or Custom), and a template, which scaffolds a ready-to-use prompt and `main.mts` suited to a specific workflow. If your project's `package.json` has `"type": "module"`, the file will be named `main.ts` instead. Choosing **Custom** scaffolds the project in a deliberately broken-until-configured state plus a `.sandcastle/SETUP_ISSUE_TRACKER.md` prompt you feed to your coding agent, which wires up your own tracker by editing the scaffolded files in place. Five templates are available:
+`sandcastle init` prompts you to choose a sandbox provider (Docker or Podman), an issue tracker (GitHub Issues, Beads, or Custom), and a template, which scaffolds a ready-to-use prompt and `main.mts` suited to a specific workflow. If your project's `package.json` has `"type": "module"`, the file will be named `main.ts` instead. Choosing **Custom** scaffolds the project in a deliberately broken-until-configured state plus a `.sandcastle/SETUP_ISSUE_TRACKER.md` prompt you feed to your coding agent, which wires up your own tracker by editing the scaffolded files in place. Six templates are available:
 
-| Template                       | Description                                                               |
-| ------------------------------ | ------------------------------------------------------------------------- |
-| `blank`                        | Bare scaffold — write your own prompt and orchestration                   |
-| `simple-loop`                  | Picks issues one by one and closes them                                   |
-| `sequential-reviewer`          | Implements issues one by one, with a code review step after each          |
-| `parallel-planner`             | Plans parallelizable issues, executes on separate branches, then merges   |
-| `parallel-planner-with-review` | Plans parallelizable issues, executes with per-branch review, then merges |
+| Template                          | Description                                                                                                                                                                      |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blank`                           | Bare scaffold — write your own prompt and orchestration                                                                                                                          |
+| `simple-loop`                     | Picks issues one by one and closes them                                                                                                                                          |
+| `sequential-reviewer`             | Implements issues one by one, with a code review step after each                                                                                                                 |
+| `parallel-planner`                | Plans parallelizable issues, executes on separate branches, then merges                                                                                                          |
+| `parallel-planner-with-review`    | Plans parallelizable issues, executes with per-branch review, then merges                                                                                                        |
+| `parallel-planner-with-pr-review` | Like the above, but issues labeled `sandcastle:require-pr` get a GitHub PR with an agent review debate, merged only after the owner approves via the `sandcastle:approved` label |
 
 Select a template during `sandcastle init` when prompted, or re-run init in a fresh repo to try a different one.
 
