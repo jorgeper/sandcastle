@@ -180,6 +180,15 @@ export const withTimeout =
       }),
     );
 
+/** The agent provider does not support native goal mode (`RunOptions.goal`). */
+export class GoalNotSupportedError extends Data.TaggedError(
+  "GoalNotSupportedError",
+)<{
+  readonly message: string;
+  /** Name of the provider that lacks goal support. */
+  readonly provider: string;
+}> {}
+
 /** Session capture (read, rewrite, or write) failed */
 export class SessionCaptureError extends Data.TaggedError(
   "SessionCaptureError",
