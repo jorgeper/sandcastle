@@ -1,4 +1,4 @@
-export { run } from "./run.js";
+export { run, DEFAULT_GOAL_MAX_TURNS } from "./run.js";
 export type {
   RunOptions,
   RunResult,
@@ -52,6 +52,7 @@ export type {
   OutputStringDefinition,
 } from "./Output.js";
 export { CwdError } from "./CwdError.js";
+export { GoalNotSupportedError } from "./GoalNotSupportedError.js";
 export {
   claudeCode,
   codex,
@@ -63,6 +64,7 @@ export {
 export type {
   AgentProvider,
   AgentCommandOptions,
+  GoalPromptOptions,
   PrintCommand,
   ClaudeCodeOptions,
   CodexOptions,

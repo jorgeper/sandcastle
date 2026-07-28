@@ -62,6 +62,12 @@ const TEMPLATES: TemplateMetadata[] = [
       "Plans parallelizable issues; issues labeled sandcastle:require-pr get a PR with an agent review debate, merged only after the owner approves via label",
     dependencies: ["zod"],
   },
+  {
+    name: "parallel-planner-goal-with-pr-review",
+    description:
+      "Like parallel-planner-with-pr-review, but every issue gets a committed spec and the implementer runs in goal mode: Claude Code's native /goal turn loop self-verifies each attempt, with fresh-context retries between attempts",
+    dependencies: ["zod"],
+  },
 ];
 
 export const listTemplates = (): TemplateMetadata[] => TEMPLATES;

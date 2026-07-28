@@ -243,7 +243,7 @@ const invokeAgent = (
     );
   });
 
-const DEFAULT_COMPLETION_SIGNAL = "<promise>COMPLETE</promise>";
+export const DEFAULT_COMPLETION_SIGNAL = "<promise>COMPLETE</promise>";
 const DEFAULT_IDLE_TIMEOUT_SECONDS = 10 * 60; // 600 seconds
 const DEFAULT_COMPLETION_TIMEOUT_SECONDS = 60;
 

@@ -13,11 +13,14 @@ import {
   type Severity,
 } from "./Display.js";
 import {
+  DEFAULT_COMPLETION_SIGNAL,
   orchestrate,
   type IterationResult,
   type IterationUsage,
   type OrchestrateResult,
 } from "./Orchestrator.js";
+import { GOAL_CONDITION_MAX_CHARS } from "./AgentProvider.js";
+import { GoalNotSupportedError } from "./errors.js";
 import { resolvePrompt } from "./PromptResolver.js";
 import {
   WorktreeDockerSandboxFactory,
@@ -89,6 +92,92 @@ Emit only a corrected <${error.tag}> block. Do not change files or run commands.
 
 /** Default maximum number of iterations for a run. */
 export const DEFAULT_MAX_ITERATIONS = 1;
+
+/** Default inner turn bound per iteration for goal mode (`RunOptions.goal`). */
+export const DEFAULT_GOAL_MAX_TURNS = 25;
+
+/**
+ * Derive the goal-mode outcome for a finished run: `undefined` for non-goal
+ * runs; otherwise whether the completion signal fired (the composed condition
+ * requires the signal, so a turn-bound exit carries no signal — see
+ * `composeClaudeGoalPrompt`). Shared by `run()` and `createSandbox().run()`.
+ *
+ * @internal
+ */
+export const deriveGoalMet = (
+  goal: string | undefined,
+  completionSignal: string | undefined,
+): boolean | undefined =>
+  goal !== undefined ? completionSignal !== undefined : undefined;
+
+/**
+ * Validate goal-mode options and compose the provider-native goal prompt.
+ * Returns `undefined` when goal mode is not requested. Shared by `run()` and
+ * `createSandbox().run()` so both surfaces validate identically.
+ *
+ * @internal
+ */
+export const resolveGoalPrompt = (opts: {
+  readonly goal?: string;
+  readonly goalMaxTurns?: number;
+  readonly prompt?: string;
+  readonly promptFile?: string;
+  readonly completionSignal?: string | string[];
+  readonly provider: AgentProvider;
+}): string | undefined => {
+  if (opts.goal === undefined) {
+    if (opts.goalMaxTurns !== undefined) {
+      throw new Error("goalMaxTurns requires goal to be set.");
+    }
+    return undefined;
+  }
+  if (opts.prompt !== undefined || opts.promptFile !== undefined) {
+    throw new Error(
+      "goal cannot be combined with prompt or promptFile. " +
+        "In goal mode the composed goal command is the entire prompt; " +
+        "put task instructions in the condition's referenced files or workspace skills.",
+    );
+  }
+  if (opts.goal.trim() === "") {
+    throw new Error("goal must be a non-empty condition string.");
+  }
+  const goalMaxTurns = opts.goalMaxTurns ?? DEFAULT_GOAL_MAX_TURNS;
+  if (!Number.isInteger(goalMaxTurns) || goalMaxTurns < 1) {
+    throw new Error(
+      `goalMaxTurns must be a positive integer. Received: ${goalMaxTurns}`,
+    );
+  }
+  if (!opts.provider.composeGoalPrompt) {
+    throw new GoalNotSupportedError({
+      message:
+        `The "${opts.provider.name}" provider does not support goal mode (RunOptions.goal). ` +
+        "Use claudeCode, or drive the loop with prompt/promptFile and maxIterations.",
+      provider: opts.provider.name,
+    });
+  }
+  const goalCompletionSignal = Array.isArray(opts.completionSignal)
+    ? opts.completionSignal[0]
+    : (opts.completionSignal ?? DEFAULT_COMPLETION_SIGNAL);
+  if (!goalCompletionSignal) {
+    throw new Error(
+      "goal requires a completion signal; completionSignal must not be an empty array.",
+    );
+  }
+  const goalPrompt = opts.provider.composeGoalPrompt({
+    goal: opts.goal,
+    maxTurns: goalMaxTurns,
+    completionSignal: goalCompletionSignal,
+  });
+  const condition = goalPrompt.replace(/^\/goal /, "");
+  if (condition.length > GOAL_CONDITION_MAX_CHARS) {
+    throw new Error(
+      `goal condition is ${condition.length} characters after composition ` +
+        `(max ${GOAL_CONDITION_MAX_CHARS}). Move detail into a referenced ` +
+        "file (e.g. a committed spec) and keep the condition short.",
+    );
+  }
+  return goalPrompt;
+};
 
 /** Replace characters that are invalid or problematic in file paths with dashes. */
 export const sanitizeBranchForFilename = (branch: string): string =>
@@ -356,6 +445,29 @@ export interface RunOptions<A extends AgentProvider = AgentProvider> {
   readonly promptFile?: string;
   /** Maximum iterations to run (default: 1) */
   readonly maxIterations?: number;
+  /**
+   * Goal mode: a completion condition the agent works toward autonomously
+   * within each iteration, judged after every turn by the provider's native
+   * goal engine (Claude Code's `/goal`). Mutually exclusive with `prompt`
+   * and `promptFile` — the composed goal command is the entire prompt.
+   *
+   * Write the condition as observable end states ("all tests pass", "a
+   * summary comment exists on the issue"), not actions. The provider appends
+   * a completion-signal clause (so `goalMet` can be derived) and the
+   * `goalMaxTurns` bound. Only providers with native goal support accept
+   * this option; others throw `GoalNotSupportedError`.
+   *
+   * `maxIterations` keeps its meaning as outer fresh-context attempts —
+   * goal-mode callers typically use small values (~4). See ADR 0021.
+   */
+  readonly goal?: string;
+  /**
+   * Inner turn bound per iteration for goal mode: the provider appends
+   * "or stop after N turns" to the condition, so an attempt that stalls
+   * hands control back to the outer iteration loop for a fresh-context
+   * retry. Only meaningful with `goal`. Default: 25.
+   */
+  readonly goalMaxTurns?: number;
   /** Lifecycle hooks grouped by execution location (host or sandbox). */
   readonly hooks?: SandboxHooks;
   /** Key-value map for {{KEY}} placeholder substitution in prompts */
@@ -437,6 +549,8 @@ export type ResumeRunResultOptions = Omit<
   | "resumeSession"
   | "forkSession"
   | "maxIterations"
+  | "goal"
+  | "goalMaxTurns"
 >;
 
 export interface RunResult {
@@ -454,6 +568,10 @@ export interface RunResult {
   readonly logFilePath?: string;
   /** Host path to the preserved worktree, set when the run succeeded but the worktree had uncommitted changes. */
   readonly preservedWorktreePath?: string;
+  /** Goal-mode outcome: `true` when the judge passed the condition (the
+   *  completion signal fired), `false` when iterations were exhausted first.
+   *  `undefined` for non-goal runs. */
+  readonly goalMet?: boolean;
   /** Continue the last captured agent session for exactly one iteration.
    *  Present only when the provider supports resume (`sessionStorage` populated). */
   readonly resume?: (
@@ -548,6 +666,17 @@ export async function run(
     );
   }
 
+  // Goal mode: validate and compose the provider-native goal prompt. The
+  // composed command is the entire (inline) prompt for every iteration.
+  const goalPrompt = resolveGoalPrompt({
+    goal: options.goal,
+    goalMaxTurns: options.goalMaxTurns,
+    prompt,
+    promptFile,
+    completionSignal: options.completionSignal,
+    provider,
+  });
+
   // Validate: output requires maxIterations === 1
   if (options.output && maxIterations !== 1) {
     throw new Error(
@@ -593,12 +722,16 @@ export async function run(
     });
   }
 
-  // Resolve prompt
-  const resolved = await Effect.runPromise(
-    resolvePrompt({ prompt, promptFile }).pipe(
-      Effect.provide(NodeContext.layer),
-    ),
-  );
+  // Resolve prompt. In goal mode the composed goal command is the prompt and
+  // is treated as inline: no arg substitution, no shell expansion.
+  const resolved =
+    goalPrompt !== undefined
+      ? { text: goalPrompt, source: "inline" as const }
+      : await Effect.runPromise(
+          resolvePrompt({ prompt, promptFile }).pipe(
+            Effect.provide(NodeContext.layer),
+          ),
+        );
   const rawPrompt = resolved.text;
   const isInlinePrompt = resolved.source === "inline";
 
@@ -800,6 +933,7 @@ export async function run(
 
   const baseResult = {
     ...result,
+    goalMet: deriveGoalMet(options.goal, result.completionSignal),
     logFilePath:
       resolvedLogging.type === "file" ? resolvedLogging.path : undefined,
     resume: async (
@@ -816,6 +950,8 @@ export async function run(
         prompt,
         promptFile: undefined,
         promptArgs: undefined,
+        goal: undefined,
+        goalMaxTurns: undefined,
         maxIterations: 1,
         resumeSession: lastIteration.sessionId,
       });
@@ -834,6 +970,8 @@ export async function run(
         prompt,
         promptFile: undefined,
         promptArgs: undefined,
+        goal: undefined,
+        goalMaxTurns: undefined,
         maxIterations: 1,
         resumeSession: lastIteration.sessionId,
         forkSession: true,
@@ -883,6 +1021,8 @@ export async function run(
           ),
           promptFile: undefined,
           promptArgs: undefined,
+          goal: undefined,
+          goalMaxTurns: undefined,
           resumeSession: error.sessionId,
           forkSession: false,
           output: retryOutput,

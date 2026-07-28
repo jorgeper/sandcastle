@@ -214,6 +214,37 @@ export interface AgentCommandOptions {
   readonly forkSession?: boolean;
 }
 
+/** Options passed to composeGoalPrompt. */
+export interface GoalPromptOptions {
+  /** The caller's completion condition, written as observable end states. */
+  readonly goal: string;
+  /** Inner turn bound appended to the condition ("or stop after N turns"). */
+  readonly maxTurns: number;
+  /** Completion signal the condition requires the agent to emit, so the
+   *  orchestrator's existing substring detection distinguishes goal-met from
+   *  a turn-bound exit. */
+  readonly completionSignal: string;
+}
+
+/**
+ * Maximum condition length accepted by Claude Code's `/goal` command.
+ * The composed condition (everything after the `/goal ` prefix) must fit.
+ */
+export const GOAL_CONDITION_MAX_CHARS = 4000;
+
+/**
+ * Compose the native Claude Code goal-mode prompt. The judge evaluates the
+ * whole condition after every turn: the caller's condition, the
+ * completion-signal clause (goal-met detection), and the turn bound (hands
+ * control back to the outer iteration loop).
+ */
+export const composeClaudeGoalPrompt = ({
+  goal,
+  maxTurns,
+  completionSignal,
+}: GoalPromptOptions): string =>
+  `/goal ${goal.trim()}, and you have emitted ${completionSignal} — or stop after ${maxTurns} turns`;
+
 /** Return type of buildPrintCommand — command string plus optional stdin content.
  *  When `stdin` is set, the sandbox pipes it to the child process's stdin
  *  instead of inlining the prompt in argv, avoiding the Linux 128 KB per-arg limit. */
@@ -271,6 +302,12 @@ export interface AgentProvider {
   readonly sessionStorage?: AgentSessionStorage;
   buildPrintCommand(options: AgentCommandOptions): PrintCommand;
   buildInteractiveArgs?(options: AgentCommandOptions): string[];
+  /**
+   * Compose the provider-native goal-mode prompt for `RunOptions.goal`.
+   * Providers without native goal support leave this undefined; `run()`
+   * throws `GoalNotSupportedError` for them.
+   */
+  composeGoalPrompt?(options: GoalPromptOptions): string;
   parseStreamLine(line: string): ParsedStreamEvent[];
   /** Parse token usage from the captured session JSONL content. Only implemented by Claude Code. */
   parseSessionUsage?(content: string): IterationUsage | undefined;
@@ -1229,6 +1266,10 @@ export const claudeCode = (
     if (options?.effort) args.push("--effort", options.effort);
     if (prompt) args.push(prompt);
     return args;
+  },
+
+  composeGoalPrompt(goalOptions: GoalPromptOptions): string {
+    return composeClaudeGoalPrompt(goalOptions);
   },
 
   parseStreamLine(line: string): ParsedStreamEvent[] {

@@ -388,20 +388,22 @@ if (closeResult.preservedWorktreePath) {
 
 #### `SandboxRunOptions`
 
-| Option                     | Type               | Default                       | Description                                                                                                                          |
-| -------------------------- | ------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `agent`                    | AgentProvider      | —                             | **Required.** Agent provider (e.g. `claudeCode("claude-opus-4-8")`)                                                                  |
-| `prompt`                   | string             | —                             | Inline prompt (mutually exclusive with `promptFile`)                                                                                 |
-| `promptFile`               | string             | —                             | Path to prompt file (mutually exclusive with `prompt`)                                                                               |
-| `promptArgs`               | PromptArgs         | —                             | Key-value map for `{{KEY}}` placeholder substitution                                                                                 |
-| `maxIterations`            | number             | `1`                           | Maximum iterations to run                                                                                                            |
-| `completionSignal`         | string \| string[] | `<promise>COMPLETE</promise>` | String(s) the agent emits to stop the iteration loop early                                                                           |
-| `idleTimeoutSeconds`       | number             | `600`                         | Idle timeout in seconds — resets on each agent output event                                                                          |
-| `completionTimeoutSeconds` | number             | `60`                          | Grace window after the completion signal is seen but the agent process hasn't exited                                                 |
-| `name`                     | string             | —                             | Display name for the run                                                                                                             |
-| `logging`                  | object             | file (auto-generated)         | `{ type: 'file', path }` or `{ type: 'stdout' }`                                                                                     |
-| `resumeSession`            | string             | —                             | Resume a prior session by ID for agents that support resume. Incompatible with `maxIterations > 1`. Session file must exist on host. |
-| `signal`                   | AbortSignal        | —                             | Cancels the run when aborted; handle stays usable afterward                                                                          |
+| Option                     | Type               | Default                       | Description                                                                                                                                                                          |
+| -------------------------- | ------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `agent`                    | AgentProvider      | —                             | **Required.** Agent provider (e.g. `claudeCode("claude-opus-4-8")`)                                                                                                                  |
+| `prompt`                   | string             | —                             | Inline prompt (mutually exclusive with `promptFile`)                                                                                                                                 |
+| `promptFile`               | string             | —                             | Path to prompt file (mutually exclusive with `prompt`)                                                                                                                               |
+| `promptArgs`               | PromptArgs         | —                             | Key-value map for `{{KEY}}` placeholder substitution                                                                                                                                 |
+| `maxIterations`            | number             | `1`                           | Maximum iterations to run                                                                                                                                                            |
+| `completionSignal`         | string \| string[] | `<promise>COMPLETE</promise>` | String(s) the agent emits to stop the iteration loop early                                                                                                                           |
+| `idleTimeoutSeconds`       | number             | `600`                         | Idle timeout in seconds — resets on each agent output event                                                                                                                          |
+| `completionTimeoutSeconds` | number             | `60`                          | Grace window after the completion signal is seen but the agent process hasn't exited                                                                                                 |
+| `name`                     | string             | —                             | Display name for the run                                                                                                                                                             |
+| `logging`                  | object             | file (auto-generated)         | `{ type: 'file', path }` or `{ type: 'stdout' }`                                                                                                                                     |
+| `goal`                     | string             | —                             | Goal mode: completion condition judged each turn by the provider's native goal engine. Mutually exclusive with `prompt`/`promptFile`. Claude Code only. See [Goal mode](#goal-mode). |
+| `goalMaxTurns`             | number             | `25`                          | Inner turn bound per iteration for goal mode. Only meaningful with `goal`.                                                                                                           |
+| `resumeSession`            | string             | —                             | Resume a prior session by ID for agents that support resume. Incompatible with `maxIterations > 1`. Session file must exist on host.                                                 |
+| `signal`                   | AbortSignal        | —                             | Cancels the run when aborted; handle stays usable afterward                                                                                                                          |
 
 #### `SandboxRunResult`
 
@@ -412,6 +414,7 @@ if (closeResult.preservedWorktreePath) {
 | `stdout`                   | string                                                                                   | Combined agent output from all iterations                                                                                           |
 | `commits`                  | `{ sha }[]`                                                                              | Commits created during the run                                                                                                      |
 | `logFilePath`              | string?                                                                                  | Path to the log file (only when logging to a file)                                                                                  |
+| `goalMet`                  | boolean?                                                                                 | Goal-mode outcome: `true` when the judge passed the condition, `false` when iterations ran out. `undefined` for non-goal runs.      |
 | `resume(prompt, options?)` | `(prompt: string, options?: ResumeSandboxRunResultOptions) => Promise<SandboxRunResult>` | Continue the captured session for one iteration inside the same warm sandbox. Present only when the provider captured a session id. |
 | `fork(prompt, options?)`   | `(prompt: string, options?: ResumeSandboxRunResultOptions) => Promise<SandboxRunResult>` | Fork the captured session for one iteration inside the same warm sandbox. The parent session is left intact (ADR 0018).             |
 
@@ -645,6 +648,35 @@ You are working on {{SOURCE_BRANCH}}. When diffing, compare against {{TARGET_BRA
 
 Passing `SOURCE_BRANCH` or `TARGET_BRANCH` in `promptArgs` is an error — built-in prompt arguments cannot be overridden.
 
+### Goal mode
+
+Instead of a prompt, a run can be driven by a **goal** — a completion condition the agent works toward autonomously, judged after every turn by the agent runtime's native goal engine (Claude Code's `/goal`, a separate evaluator model):
+
+```ts
+const result = await sandbox.run({
+  name: "implementer",
+  agent: claudeCode("claude-opus-4-8"),
+  goal: "all acceptance criteria in specs/issue-42.md are satisfied: typecheck and tests pass, a summary comment exists on issue #42",
+  goalMaxTurns: 25, // inner turn bound per iteration
+  maxIterations: 4, // outer fresh-context attempts
+});
+if (result.goalMet) {
+  /* the judge verified the condition */
+}
+```
+
+This is a hybrid loop (ADR 0021): **inside** each iteration, Claude Code's turn loop works and self-verifies — the judge scores the transcript against the condition after every turn and feeds "not met, because X" back to the agent. **Between** iterations, Sandcastle's fresh-context reset applies as usual: a stalled attempt hits its turn bound, and the next iteration starts clean, continuing from git state. Use small `maxIterations` values (~4) — each iteration is a full autonomous attempt, not a single turn.
+
+Mechanics and constraints:
+
+- `goal` is **mutually exclusive** with `prompt`/`promptFile` — the composed goal command is the entire prompt. Put task instructions in files the condition references (a committed spec) or in workspace skills/CLAUDE.md.
+- Write the condition as **observable end states** ("all tests pass", "a comment exists on the issue"), not actions. The judge only sees what the agent surfaced in its session.
+- Sandcastle appends a completion-signal clause to the condition, so the goal cannot pass until the agent also emits the signal — that's how `goalMet` is derived and how a goal-met exit is distinguished from a turn-bound exit. Detection then works exactly like [early termination](#early-termination-with-promisecompletepromise).
+- Only Claude Code supports goal mode; other providers throw `GoalNotSupportedError`. Requires Claude Code ≥ 2.1.139 in the sandbox image, and hooks must not be disabled (`/goal` is implemented as a session-scoped Stop hook).
+- The composed condition must fit Claude Code's 4,000-character goal limit — keep the condition short and let a referenced file carry the detail.
+
+The `parallel-planner-goal-with-pr-review` template is the reference workflow: a spec writer distills each issue into a committed spec plus goal statement, and the implementer runs against it in goal mode. See `docs/spikes/goal-mode.md` for the verified runtime behavior.
+
 ### Early termination with `<promise>COMPLETE</promise>`
 
 When the agent outputs `<promise>COMPLETE</promise>`, the orchestrator stops the iteration loop early. This is a convention you document in your prompt for the agent to follow — the engine never injects it.
@@ -846,39 +878,42 @@ Removes the Podman image.
 
 ### `RunOptions`
 
-| Option                     | Type               | Default                       | Description                                                                                                                                                                                                                  |
-| -------------------------- | ------------------ | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agent`                    | AgentProvider      | —                             | **Required.** Agent provider (e.g. `claudeCode("claude-opus-4-8")`, `pi("claude-sonnet-4-6")`, `codex("gpt-5.4")`, `cursor("composer-2")`, `opencode("opencode/big-pickle")`, `copilot("claude-sonnet-4.5")`)                |
-| `sandbox`                  | SandboxProvider    | —                             | **Required.** Sandbox provider (e.g. `docker()`, `podman()`, `docker({ imageName: "sandcastle:local" })`)                                                                                                                    |
-| `cwd`                      | string             | `process.cwd()`               | Host repo directory — anchor for `.sandcastle/` artifacts and git operations. Relative paths resolve against `process.cwd()`.                                                                                                |
-| `prompt`                   | string             | —                             | Inline prompt (mutually exclusive with `promptFile`)                                                                                                                                                                         |
-| `promptFile`               | string             | —                             | Path to prompt file (mutually exclusive with `prompt`). Resolves against `process.cwd()`, **not** `cwd`.                                                                                                                     |
-| `maxIterations`            | number             | `1`                           | Maximum iterations to run                                                                                                                                                                                                    |
-| `hooks`                    | SandboxHooks       | —                             | Lifecycle hooks (`host.*`, `sandbox.*`)                                                                                                                                                                                      |
-| `name`                     | string             | —                             | Display name for the run, shown as a prefix in log output                                                                                                                                                                    |
-| `promptArgs`               | PromptArgs         | —                             | Key-value map for `{{KEY}}` placeholder substitution                                                                                                                                                                         |
-| `branchStrategy`           | BranchStrategy     | per-provider default          | Branch strategy: `{ type: 'head' }`, `{ type: 'merge-to-head' }`, or `{ type: 'branch', branch: '…' }`                                                                                                                       |
-| `copyToWorktree`           | string[]           | —                             | Host-relative file paths to copy into the sandbox before start (not supported with `branchStrategy: { type: 'head' }`)                                                                                                       |
-| `logging`                  | object             | file (auto-generated)         | `{ type: 'file', path }` or `{ type: 'stdout' }`                                                                                                                                                                             |
-| `completionSignal`         | string \| string[] | `<promise>COMPLETE</promise>` | String or array of strings the agent emits to stop the iteration loop early                                                                                                                                                  |
-| `idleTimeoutSeconds`       | number             | `600`                         | Idle timeout in seconds — resets on each agent output event                                                                                                                                                                  |
-| `completionTimeoutSeconds` | number             | `60`                          | Grace window in seconds after the completion signal is observed but the agent process has not exited (hanging process). See [Hanging processes after the completion signal](#hanging-processes-after-the-completion-signal). |
-| `resumeSession`            | string             | —                             | Resume a prior session by ID for agents that support resume. Incompatible with `maxIterations > 1`. Session file must exist on host.                                                                                         |
-| `signal`                   | AbortSignal        | —                             | Cancel the run when aborted. Kills the in-flight agent subprocess and cancels lifecycle hooks; the worktree is preserved on disk. Rejects with `signal.reason`.                                                              |
-| `timeouts`                 | Timeouts           | —                             | Override default timeouts for built-in lifecycle steps: `copyToWorktreeMs` (60 000), `gitSetupMs` (10 000), `commitCollectionMs` (30 000), `mergeToHostMs` (30 000).                                                         |
-| `output`                   | OutputDefinition   | —                             | Structured output definition (`Output.object(…)` or `Output.string(…)`). Requires `maxIterations === 1`. See [Structured output](#structured-output).                                                                        |
+| Option                     | Type               | Default                       | Description                                                                                                                                                                                                                        |
+| -------------------------- | ------------------ | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent`                    | AgentProvider      | —                             | **Required.** Agent provider (e.g. `claudeCode("claude-opus-4-8")`, `pi("claude-sonnet-4-6")`, `codex("gpt-5.4")`, `cursor("composer-2")`, `opencode("opencode/big-pickle")`, `copilot("claude-sonnet-4.5")`)                      |
+| `sandbox`                  | SandboxProvider    | —                             | **Required.** Sandbox provider (e.g. `docker()`, `podman()`, `docker({ imageName: "sandcastle:local" })`)                                                                                                                          |
+| `cwd`                      | string             | `process.cwd()`               | Host repo directory — anchor for `.sandcastle/` artifacts and git operations. Relative paths resolve against `process.cwd()`.                                                                                                      |
+| `prompt`                   | string             | —                             | Inline prompt (mutually exclusive with `promptFile`)                                                                                                                                                                               |
+| `promptFile`               | string             | —                             | Path to prompt file (mutually exclusive with `prompt`). Resolves against `process.cwd()`, **not** `cwd`.                                                                                                                           |
+| `maxIterations`            | number             | `1`                           | Maximum iterations to run                                                                                                                                                                                                          |
+| `hooks`                    | SandboxHooks       | —                             | Lifecycle hooks (`host.*`, `sandbox.*`)                                                                                                                                                                                            |
+| `name`                     | string             | —                             | Display name for the run, shown as a prefix in log output                                                                                                                                                                          |
+| `promptArgs`               | PromptArgs         | —                             | Key-value map for `{{KEY}}` placeholder substitution                                                                                                                                                                               |
+| `branchStrategy`           | BranchStrategy     | per-provider default          | Branch strategy: `{ type: 'head' }`, `{ type: 'merge-to-head' }`, or `{ type: 'branch', branch: '…' }`                                                                                                                             |
+| `copyToWorktree`           | string[]           | —                             | Host-relative file paths to copy into the sandbox before start (not supported with `branchStrategy: { type: 'head' }`)                                                                                                             |
+| `logging`                  | object             | file (auto-generated)         | `{ type: 'file', path }` or `{ type: 'stdout' }`                                                                                                                                                                                   |
+| `completionSignal`         | string \| string[] | `<promise>COMPLETE</promise>` | String or array of strings the agent emits to stop the iteration loop early                                                                                                                                                        |
+| `idleTimeoutSeconds`       | number             | `600`                         | Idle timeout in seconds — resets on each agent output event                                                                                                                                                                        |
+| `completionTimeoutSeconds` | number             | `60`                          | Grace window in seconds after the completion signal is observed but the agent process has not exited (hanging process). See [Hanging processes after the completion signal](#hanging-processes-after-the-completion-signal).       |
+| `goal`                     | string             | —                             | Goal mode: a completion condition the agent works toward autonomously, judged after every turn by the provider's native goal engine. Mutually exclusive with `prompt`/`promptFile`. Claude Code only. See [Goal mode](#goal-mode). |
+| `goalMaxTurns`             | number             | `25`                          | Inner turn bound per iteration for goal mode — "or stop after N turns" is appended to the condition. Only meaningful with `goal`.                                                                                                  |
+| `resumeSession`            | string             | —                             | Resume a prior session by ID for agents that support resume. Incompatible with `maxIterations > 1`. Session file must exist on host.                                                                                               |
+| `signal`                   | AbortSignal        | —                             | Cancel the run when aborted. Kills the in-flight agent subprocess and cancels lifecycle hooks; the worktree is preserved on disk. Rejects with `signal.reason`.                                                                    |
+| `timeouts`                 | Timeouts           | —                             | Override default timeouts for built-in lifecycle steps: `copyToWorktreeMs` (60 000), `gitSetupMs` (10 000), `commitCollectionMs` (30 000), `mergeToHostMs` (30 000).                                                               |
+| `output`                   | OutputDefinition   | —                             | Structured output definition (`Output.object(…)` or `Output.string(…)`). Requires `maxIterations === 1`. See [Structured output](#structured-output).                                                                              |
 
 ### `RunResult`
 
-| Field              | Type                | Description                                                        |
-| ------------------ | ------------------- | ------------------------------------------------------------------ |
-| `iterations`       | `IterationResult[]` | Per-iteration results (use `.length` for the count)                |
-| `completionSignal` | string?             | The matched completion signal string, or `undefined` if none fired |
-| `stdout`           | string              | Agent output                                                       |
-| `commits`          | `{ sha }[]`         | Commits created during the run                                     |
-| `branch`           | string              | Target branch name                                                 |
-| `logFilePath`      | string?             | Path to the log file (only when logging to a file)                 |
-| `output`           | T?                  | Typed structured output (only present when `output` option is set) |
+| Field              | Type                | Description                                                                                                                                 |
+| ------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `iterations`       | `IterationResult[]` | Per-iteration results (use `.length` for the count)                                                                                         |
+| `completionSignal` | string?             | The matched completion signal string, or `undefined` if none fired                                                                          |
+| `stdout`           | string              | Agent output                                                                                                                                |
+| `commits`          | `{ sha }[]`         | Commits created during the run                                                                                                              |
+| `branch`           | string              | Target branch name                                                                                                                          |
+| `logFilePath`      | string?             | Path to the log file (only when logging to a file)                                                                                          |
+| `goalMet`          | boolean?            | Goal-mode outcome: `true` when the judge passed the condition, `false` when iterations were exhausted first. `undefined` for non-goal runs. |
+| `output`           | T?                  | Typed structured output (only present when `output` option is set)                                                                          |
 
 ### `IterationResult`
 

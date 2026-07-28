@@ -29,6 +29,8 @@ import {
   buildContextWindowLines,
   buildLogFilename,
   printFileDisplayStartup,
+  deriveGoalMet,
+  resolveGoalPrompt,
 } from "./run.js";
 import {
   withSandboxLifecycle,
@@ -141,6 +143,16 @@ export interface SandboxRunOptions extends ResumeSandboxRunResultOptions {
   readonly promptFile?: string;
   /** Maximum iterations to run (default: 1). */
   readonly maxIterations?: number;
+  /**
+   * Goal mode: a completion condition the agent works toward autonomously
+   * within each iteration, judged after every turn by the provider's native
+   * goal engine (Claude Code's `/goal`). Mutually exclusive with `prompt`
+   * and `promptFile`. Providers without native goal support throw
+   * `GoalNotSupportedError`. See `RunOptions.goal` and ADR 0021.
+   */
+  readonly goal?: string;
+  /** Inner turn bound per iteration for goal mode. Only meaningful with `goal`. Default: 25. */
+  readonly goalMaxTurns?: number;
   /** Resume a prior agent session by id. The session JSONL must exist on the host (captured by a prior `sandbox.run()`). Incompatible with `maxIterations > 1`. */
   readonly resumeSession?: string;
   /**
@@ -166,6 +178,10 @@ export interface SandboxRunResult {
   readonly commits: { sha: string }[];
   /** Path to the log file, if logging was drained to a file. */
   readonly logFilePath?: string;
+  /** Goal-mode outcome: `true` when the judge passed the condition (the
+   *  completion signal fired), `false` when iterations were exhausted first.
+   *  `undefined` for non-goal runs. */
+  readonly goalMet?: boolean;
   /**
    * Continue the last captured agent session for exactly one iteration inside
    * the same long-lived sandbox. Present only when the provider supports
@@ -364,11 +380,25 @@ const buildSandboxHandle = (
         });
       }
 
-      const resolved = await Effect.runPromise(
-        resolvePrompt({ prompt, promptFile }).pipe(
-          Effect.provide(NodeContext.layer),
-        ),
-      );
+      // Goal mode: validate and compose the provider-native goal prompt. The
+      // composed command is the entire (inline) prompt for every iteration.
+      const goalPrompt = resolveGoalPrompt({
+        goal: runOptions.goal,
+        goalMaxTurns: runOptions.goalMaxTurns,
+        prompt,
+        promptFile,
+        completionSignal: runOptions.completionSignal,
+        provider,
+      });
+
+      const resolved =
+        goalPrompt !== undefined
+          ? { text: goalPrompt, source: "inline" as const }
+          : await Effect.runPromise(
+              resolvePrompt({ prompt, promptFile }).pipe(
+                Effect.provide(NodeContext.layer),
+              ),
+            );
       const rawPrompt = resolved.text;
       const isInlinePrompt = resolved.source === "inline";
 
@@ -507,6 +537,7 @@ const buildSandboxHandle = (
         commits: result.commits,
         logFilePath:
           resolvedLogging.type === "file" ? resolvedLogging.path : undefined,
+        goalMet: deriveGoalMet(runOptions.goal, result.completionSignal),
       };
 
       // Expose .resume()/.fork() only when the provider supports session
@@ -528,6 +559,8 @@ const buildSandboxHandle = (
               prompt: nextPrompt,
               promptFile: undefined,
               promptArgs: undefined,
+              goal: undefined,
+              goalMaxTurns: undefined,
               maxIterations: 1,
               resumeSession: capturedSessionId,
             }),
@@ -541,6 +574,8 @@ const buildSandboxHandle = (
               prompt: nextPrompt,
               promptFile: undefined,
               promptArgs: undefined,
+              goal: undefined,
+              goalMaxTurns: undefined,
               maxIterations: 1,
               resumeSession: capturedSessionId,
               forkSession: true,

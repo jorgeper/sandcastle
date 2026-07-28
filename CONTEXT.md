@@ -102,6 +102,22 @@ _Avoid_: "stuck agent" (implies stuck _mid-work_, not done-but-not-exited), "zom
 A silence-based grace window that takes over from the **idle timeout** once a **completion signal** is detected in the **agent**'s output. Reset by every subsequent output line so trailing data (token-usage events, terminal `result` events, **structured output** tags emitted after the signal) is still captured. On expiry the run resolves **successfully** with a warning that the process is hanging -- in contrast to **idle timeout** expiry, which fails the run. Configured via `completionTimeoutSeconds`; default 60 seconds. Independent of `idleTimeoutSeconds` -- they cover different phases.
 _Avoid_: "grace period" (too generic), "post-completion timeout", "completion grace window", "drain timeout"
 
+**Goal**:
+A completion condition passed via `RunOptions.goal` that the **agent** works toward autonomously within an **iteration**, evaluated by the **judge** after every turn. Written as observable end states, not actions. Mutually exclusive with **prompt** -- the composed goal command _is_ the prompt. See ADR 0021.
+_Avoid_: "objective", "target", conflating with **task** (a goal states when a task is done, not what the task is)
+
+**Goal statement**:
+The condition text itself -- typically one sentence referencing a committed **spec** by path, with the most load-bearing criteria inline. Sandcastle appends the **completion signal** clause and turn bound during composition.
+_Avoid_: "goal prompt" (it is a condition, not instructions)
+
+**Judge**:
+The separate evaluator model (Claude Code's `/goal` engine, Haiku by default) that scores the session transcript against the **goal** after every turn and either ends the run or feeds the miss reason back to the **agent**. It sees only what the agent surfaced -- it runs no commands itself.
+_Avoid_: "evaluator" (in prose, prefer judge), "verifier", "critic"
+
+**Spec**:
+A committed per-**task** file (`specs/issue-<n>.md`) carrying the **goal statement** (`## Goal`) and acceptance criteria, linked from the issue body via a `**Spec:**` line. The durable source of truth the **goal statement** references; distinct from a PRD, which describes a whole feature rather than one task's definition of done.
+_Avoid_: "spec file" (redundant), conflating with "PRD"
+
 **Structured output**:
 A schema-validated JSON payload emitted by the **agent** inside a caller-specified XML tag and returned to the caller of `run()`. Configured via `output: Output.object({ tag, schema })`. Orthogonal to the **completion signal** -- a run can use either, both, or neither. The caller owns the prompt-side instruction telling the agent to emit the tag; Sandcastle does not inject it, and `run()` errors early if the resolved prompt does not contain the configured tag.
 _Avoid_: "output payload", "result", "JSON output"
