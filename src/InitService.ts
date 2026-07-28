@@ -56,6 +56,12 @@ const TEMPLATES: TemplateMetadata[] = [
       "Plans parallelizable issues, executes with per-branch review, merges",
     dependencies: ["zod"],
   },
+  {
+    name: "parallel-planner-with-pr-review",
+    description:
+      "Plans parallelizable issues; issues labeled sandcastle:require-pr get a PR with an agent review debate, merged only after the owner approves via label",
+    dependencies: ["zod"],
+  },
 ];
 
 export const listTemplates = (): TemplateMetadata[] => TEMPLATES;
