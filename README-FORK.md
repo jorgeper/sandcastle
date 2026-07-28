@@ -6,6 +6,52 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Goal mode: native /goal-driven implementer (`feat/goal-mode`)
+
+Replaces "spawn 100 fresh agents and substring-match their own completion
+claim" with Claude Code's native `/goal` engine, wrapped in a hybrid loop
+(spec: `prd/003-goal-mode.md`, decision record: ADR 0021). Motivation:
+false completions (the worker declared itself done and nothing verified
+it), silent stalls (a no-progress run burned every iteration), and the
+re-exploration tax of 100 fresh spawns.
+
+**What was added**
+
+- Engine: `RunOptions.goal` (a completion condition judged after every turn
+  by `/goal`'s separate evaluator model) + `goalMaxTurns` (inner turn bound,
+  default 25), and `RunResult.goalMet` — on both `run()` and
+  `createSandbox().run()`. `goal` is mutually exclusive with
+  `prompt`/`promptFile`; the composed `/goal` command _is_ the prompt.
+  `maxIterations` keeps its meaning as outer fresh-context attempts, so the
+  memory-through-git reset survives between autonomous attempts.
+- Provider contract, not a Claude-Code-ism: providers opt in via
+  `composeGoalPrompt`; everyone else throws `GoalNotSupportedError`
+  (exported through an Effect-free wrapper, `CwdError` pattern, to keep the
+  published `.d.ts` clean). Goal-met detection appends a completion-signal
+  clause to the condition so the judge can't pass without the signal —
+  the orchestrator's existing substring detection works unchanged, and a
+  turn-bound exit (no signal) is distinguishable from success. Spike
+  findings (no native goal event in stream-json, turn-by-turn output, the
+  signal-echo hazard) recorded in `docs/spikes/goal-mode.md`.
+- Template `parallel-planner-goal-with-pr-review`: a spec-writer step
+  distills each issue into a committed spec (`specs/issue-<n>.md`, dir
+  configurable via `SPEC_DIR`) whose `## Goal` section carries the goal
+  statement; the implementer runs against it in goal mode
+  (`GOAL_MAX_TURNS`/`IMPLEMENT_ATTEMPTS` in the config block). The spec
+  writer is an independent step like the implementer — its own `RALPH:`
+  commit and its own 🏰 issue comment with a SHA-pinned GitHub link to the
+  spec; it never edits the issue body. Unverified work (`goalMet: false`)
+  never reaches the PR or merge phases. Process rules ship as a scaffolded
+  `.claude/skills/sandcastle-implementer` skill, since goal mode has no
+  implementer prompt.
+- Everything is stateless/idempotent: spec recovery keys off the committed
+  file, criteria are phrased as observable end states, and a killed
+  orchestrator re-runs cleanly from git + issue state.
+- Docs: README goal-mode section + option/result tables, CONTEXT.md terms
+  (goal, goal statement, judge, spec), ADR 0021 (scopes ADR 0010: outer
+  loop stays in the consumer; inner turn loop delegated to the runtime).
+  Requires Claude Code ≥ 2.1.139 in the sandbox image with hooks enabled.
+
 ## Fix: resume()/fork() leaked promptArgs into the inline resume prompt (`feat/resume-strip-prompt-args`)
 
 `RunResult.resume()`/`.fork()` (and their `sandbox.run()` counterparts)
