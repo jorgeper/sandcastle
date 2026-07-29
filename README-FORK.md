@@ -6,6 +6,19 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Summarized titles for raw reports (`feat/design-title-summary`)
+
+Filing a design topic put the entire dictated paragraph into the issue
+title verbatim (`PRD: <everything you said>`); issue.ts captures had a
+crude 80-char mid-word slice, duplicated three times. Both filing paths
+now derive titles through a shared `summarizeTitle` helper (whitespace
+collapsed, first sentence when it fits, else word-boundary truncation
+with an ellipsis; full report still in the body), and the designer prompt
+instructs the agent to retitle the issue with a concise feature name as
+soon as it understands the work — mechanical summary as placeholder,
+agent summary as the real one. Found dictating a design topic during a
+real onboarding.
+
 ## Agents read the issue thread, not just the body (`feat/issue-thread-awareness`)
 
 Human replies on an issue (repro details, logs, screenshots added after
