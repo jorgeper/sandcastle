@@ -6,6 +6,22 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Design picker accepts free text (`feat/design-picker-free-text`)
+
+The bare-run `design.ts` picker is now symmetrical with `issue.ts`: type a
+number to open a waiting design issue's conversation, or describe a new
+topic in free text — the script files the `sandcastle:design` issue (same
+title/marker/label as the `-- "topic"` argument form, via one shared
+`fileDesignIssue` helper) and starts its conversation immediately. The
+prompt also appears when no design issues are waiting, so an empty lane
+invites a new topic instead of exiting silently ("every path tells you the
+next step"). Answer interpretation is a pure `interpretPickerAnswer` helper
+in the template's `shared.ts` (only a pure in-range integer is a pick;
+out-of-range or decimal input becomes a topic), unit-tested via the
+template-shipped `shared.test.ts`. Found while onboarding a real repo:
+the picker dead-ended into "Enter to finish" and never mentioned how to
+start a fresh design.
+
 ## Issue-anchored lanes: filer agent + label routing (`feat/issue-anchored-conversations`)
 
 Makes the GitHub issue the universal work item across the whole pipeline

@@ -39,9 +39,28 @@ describe("conversational-prd template", () => {
       "designer-prompt.md",
       "decomposer-prompt.md",
       "filer-prompt.md",
+      "shared.test.ts",
     ]) {
       expect(files).toContain(expected);
     }
+  });
+
+  it("design.ts picker accepts free text to file a new design topic", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir);
+    const design = await readFile(
+      join(dir, ".sandcastle", "design.ts"),
+      "utf-8",
+    );
+    // Symmetry with issue.ts: the bare-run picker offers "or describe a new
+    // topic" instead of dead-ending, and the answer is interpreted by the
+    // shared pure helper.
+    expect(design).toContain("interpretPickerAnswer");
+    expect(design).toContain("describe a new design topic");
+    // Filing a design issue from a topic exists once, used by both the
+    // argument path and the picker path (declaration + ≥2 call sites).
+    const filingSites = design.match(/fileDesignIssue/g) ?? [];
+    expect(filingSites.length).toBeGreaterThanOrEqual(3);
   });
 
   it("scripts are thin wrappers over conversation + chat", async () => {

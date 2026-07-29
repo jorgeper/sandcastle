@@ -80,6 +80,7 @@ re-attaches; unlabeled means untouched.
 | -------------------------------------------------- | ----------------------------------------------------------- |
 | Create/label an issue `sandcastle:design`          | `npm run sandcastle:design` lists it; pick it               |
 | `npm run sandcastle:design -- "some feature idea"` | Script files the design issue, then starts the conversation |
+| Type free text at the bare-run picker              | Same as above — files the issue, starts the conversation    |
 | `npm run sandcastle:design -- --issue 41`          | Skip the picker                                             |
 
 The conversation is anchored to the issue (id `design-issue-<n>`, anchor
@@ -146,7 +147,7 @@ implementers run in goal mode, reviewer/merger land the work.
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | File anything, well-formed     | `npm run sandcastle:issue -- "<report>"` — filer routes it (implement / design / hold)                           |
 | Queue work by hand             | Create an issue; add `sandcastle:design`, `sandcastle:decompose`, or `Sandcastle`                                |
-| Start/resume a design          | `npm run sandcastle:design` (topic, `--issue <n>`, or picker)                                                    |
+| Start/resume a design          | `npm run sandcastle:design` (topic, `--issue <n>`, or picker — free text files a new topic)                      |
 | Answer an agent                | Chat CLI: arrows + enter, or type; **Approve** sends `APPROVED`                                                  |
 | Step away mid-conversation     | Ctrl-C — always safe; re-run the script to re-attach                                                             |
 | Revise a PRD under review      | Comment on the PRD PR (inline works too); next design run relays it                                              |
@@ -186,7 +187,7 @@ your PR comments from agent replies.)
 ```bash
 npm run sandcastle:issue -- "report"        # file + route anything
 npm run sandcastle:design -- "idea"         # design lane (files the issue)
-npm run sandcastle:design                   # picker / re-attach
+npm run sandcastle:design                   # picker / re-attach (free text = new topic)
 npm run sandcastle:decompose                # decompose lane (picker)
 npm run sandcastle                          # implement lane (main loop)
 gh pr edit <pr> --add-label "sandcastle:approved"        # approve any gated PR

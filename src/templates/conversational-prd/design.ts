@@ -22,6 +22,7 @@ import {
   createIssue,
   commentOnIssue,
   findIssueByTitle,
+  interpretPickerAnswer,
   decomposeIssueTitle,
   linkSubIssue,
   numberFromUrl,
@@ -42,7 +43,7 @@ import {
 //
 //   npx tsx .sandcastle/design.ts "my feature idea"   # files the issue first
 //   npx tsx .sandcastle/design.ts --issue 41          # jump to one issue
-//   npx tsx .sandcastle/design.ts                     # sweep + picker
+//   npx tsx .sandcastle/design.ts                     # sweep + picker (free text files a new topic)
 //
 // Ctrl-C is always safe — conversations are durable and re-attach.
 
@@ -338,18 +339,22 @@ for (const summary of designerConversations) {
 
 // Step 2: conversations. An explicit request (topic / --issue) goes first;
 // then offer the remaining open design issues one after another.
-let firstIssue: number | undefined;
-if (args[0] === "--issue" && args[1]) {
-  firstIssue = Number.parseInt(args[1], 10);
-} else if (args.length > 0) {
-  const topic = args.join(" ").trim();
+const fileDesignIssue = (topic: string): number => {
   console.log(`\nFiling a design issue for: ${topic}`);
-  firstIssue = createIssue({
+  const issueNumber = createIssue({
     title: `PRD: ${topic}`,
     label: DESIGN_LABEL,
     body: `${AGENT_MARKER}\n\n${topic}\n\n_Filed via design.ts on behalf of the owner._`,
   });
-  console.log(`Created design issue #${firstIssue}.`);
+  console.log(`Created design issue #${issueNumber}.`);
+  return issueNumber;
+};
+
+let firstIssue: number | undefined;
+if (args[0] === "--issue" && args[1]) {
+  firstIssue = Number.parseInt(args[1], 10);
+} else if (args.length > 0) {
+  firstIssue = fileDesignIssue(args.join(" ").trim());
 }
 
 const conversationsWithPr = new Set(
@@ -364,23 +369,32 @@ for (;;) {
   firstIssue = undefined;
 
   if (issueNumber === undefined) {
-    // Issues still needing a conversation (no PRD PR yet).
+    // Issues still needing a conversation (no PRD PR yet). Symmetry with
+    // issue.ts: pick one, or describe something new — free text files a
+    // design issue and starts its conversation, so an empty list is an
+    // invitation, not a dead end.
     const candidates = listOpenIssues(DESIGN_LABEL).filter(
       (i) => !conversationsWithPr.has(i.number),
     );
-    if (candidates.length === 0) break;
-    console.log(
-      `\n${candidates.length} design issue(s) awaiting a conversation:`,
-    );
-    candidates.forEach((i, idx) =>
-      console.log(`  ${idx + 1}. #${i.number} ${i.title}`),
-    );
-    const answer = await ask("Number to work on (or Enter to finish): ");
-    const index = Number.parseInt(answer, 10);
-    if (!Number.isInteger(index) || index < 1 || index > candidates.length) {
-      break;
+    if (candidates.length > 0) {
+      console.log(
+        `\n${candidates.length} design issue(s) awaiting a conversation:`,
+      );
+      candidates.forEach((i, idx) =>
+        console.log(`  ${idx + 1}. #${i.number} ${i.title}`),
+      );
     }
-    issueNumber = candidates[index - 1]!.number;
+    const answer = await ask(
+      candidates.length > 0
+        ? "Number to work on, or describe a new design topic (Enter to finish): "
+        : "\nDescribe a new design topic (Enter to finish): ",
+    );
+    const action = interpretPickerAnswer(answer, candidates.length);
+    if (action.kind === "finish") break;
+    issueNumber =
+      action.kind === "pick"
+        ? candidates[action.index]!.number
+        : fileDesignIssue(action.topic);
   }
 
   await runDesignConversation(issueNumber);
