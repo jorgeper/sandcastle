@@ -140,6 +140,15 @@ export const runHostHooks = (
     }
   });
 
+/** Sandbox handles that already ran the setup phase (git safe.directory,
+ * identity propagation, onSandboxReady hooks). A handle stays live exactly as
+ * long as its container does (keep-alive conversations, createSandbox
+ * multi-run), so handle identity is the reuse signal: fresh containers always
+ * arrive on fresh handles and re-run setup; a second process attaching to the
+ * same container gets a new handle and harmlessly re-runs the idempotent
+ * setup once. */
+const initializedSandboxes = new WeakSet<SandboxService>();
+
 export interface SandboxLifecycleOptions {
   readonly hostRepoDir: string;
   readonly sandboxRepoDir: string;
@@ -225,146 +234,159 @@ export const withSandboxLifecycle = <A>(
     // instead of sandboxRepoDir (which may be a sandbox path like /home/agent/workspace).
     const hostSideWorktreePath = hostWorktreePath ?? sandboxRepoDir;
 
-    // Setup: onSandboxReady hooks
+    // Setup: onSandboxReady hooks. Runs once per live sandbox — a reused
+    // handle already has git config, identity, and hooks applied, so
+    // replaying them every run (e.g. every conversation turn) is pure churn.
     let resolvedBranch = "";
-    yield* display.taskLog("Setting up sandbox", (message) =>
-      Effect.gen(function* () {
-        // The bind-mounted worktree may be owned by a different UID (host user
-        // vs sandbox user). Mark it safe so git doesn't reject it with
-        // "dubious ownership".
-        yield* execOkWithGitTimeout(
-          sandbox,
-          `git config --global --add safe.directory "${sandboxRepoDir}"`,
-          gitSetupTimeoutMs,
-        );
-
-        // Propagate host git identity into the sandbox so commits are attributed
-        // to the actual developer without requiring manual setup.
-        if (hostGitName) {
+    if (initializedSandboxes.has(sandbox)) {
+      yield* display.text("Reusing live sandbox (setup already done)");
+      resolvedBranch = (yield* execOkWithGitTimeout(
+        sandbox,
+        "git rev-parse --abbrev-ref HEAD",
+        gitSetupTimeoutMs,
+        { cwd: sandboxRepoDir },
+      )).stdout.trim();
+    } else {
+      yield* display.taskLog("Setting up sandbox (new container)", (message) =>
+        Effect.gen(function* () {
+          // The bind-mounted worktree may be owned by a different UID (host user
+          // vs sandbox user). Mark it safe so git doesn't reject it with
+          // "dubious ownership".
           yield* execOkWithGitTimeout(
             sandbox,
-            `git config --global user.name "${hostGitName.replace(/"/g, '\\"')}"`,
+            `git config --global --add safe.directory "${sandboxRepoDir}"`,
             gitSetupTimeoutMs,
           );
-        }
-        if (hostGitEmail) {
-          yield* execOkWithGitTimeout(
+
+          // Propagate host git identity into the sandbox so commits are attributed
+          // to the actual developer without requiring manual setup.
+          if (hostGitName) {
+            yield* execOkWithGitTimeout(
+              sandbox,
+              `git config --global user.name "${hostGitName.replace(/"/g, '\\"')}"`,
+              gitSetupTimeoutMs,
+            );
+          }
+          if (hostGitEmail) {
+            yield* execOkWithGitTimeout(
+              sandbox,
+              `git config --global user.email "${hostGitEmail.replace(/"/g, '\\"')}"`,
+              gitSetupTimeoutMs,
+            );
+          }
+
+          // Repo is bind-mounted — discover branch directly
+          resolvedBranch = (yield* execOkWithGitTimeout(
             sandbox,
-            `git config --global user.email "${hostGitEmail.replace(/"/g, '\\"')}"`,
+            "git rev-parse --abbrev-ref HEAD",
             gitSetupTimeoutMs,
-          );
-        }
+            { cwd: sandboxRepoDir },
+          )).stdout.trim();
 
-        // Repo is bind-mounted — discover branch directly
-        resolvedBranch = (yield* execOkWithGitTimeout(
-          sandbox,
-          "git rev-parse --abbrev-ref HEAD",
-          gitSetupTimeoutMs,
-          { cwd: sandboxRepoDir },
-        )).stdout.trim();
+          // Run sandbox.onSandboxReady and host.onSandboxReady in parallel
+          const sandboxHooks = hooks?.sandbox?.onSandboxReady;
+          const hostOnSandboxReady = hooks?.host?.onSandboxReady;
 
-        // Run sandbox.onSandboxReady and host.onSandboxReady in parallel
-        const sandboxHooks = hooks?.sandbox?.onSandboxReady;
-        const hostOnSandboxReady = hooks?.host?.onSandboxReady;
-
-        if (sandboxHooks?.length) {
-          for (const hook of sandboxHooks) {
-            message(hook.command);
+          if (sandboxHooks?.length) {
+            for (const hook of sandboxHooks) {
+              message(hook.command);
+            }
           }
-        }
-        if (hostOnSandboxReady?.length) {
-          for (const hook of hostOnSandboxReady) {
-            message(`[host] ${hook.command}`);
+          if (hostOnSandboxReady?.length) {
+            for (const hook of hostOnSandboxReady) {
+              message(`[host] ${hook.command}`);
+            }
           }
-        }
 
-        // Set up abort racing for sandbox hooks (sandbox.exec doesn't
-        // natively support AbortSignal, so we race via Deferred).
-        const abortDeferred = yield* Deferred.make<never, ExecError>();
-        let abortCleanup: (() => void) | null = null;
-        if (signal.aborted) {
-          yield* Deferred.fail(
-            abortDeferred,
-            new ExecError({
-              command: "abort",
-              message: `Aborted: ${signal.reason}`,
-            }),
-          );
-        } else {
-          const onAbort = () => {
-            Effect.runPromise(
-              Deferred.fail(
-                abortDeferred,
-                new ExecError({
-                  command: "abort",
-                  message: `Aborted: ${signal.reason}`,
-                }),
+          // Set up abort racing for sandbox hooks (sandbox.exec doesn't
+          // natively support AbortSignal, so we race via Deferred).
+          const abortDeferred = yield* Deferred.make<never, ExecError>();
+          let abortCleanup: (() => void) | null = null;
+          if (signal.aborted) {
+            yield* Deferred.fail(
+              abortDeferred,
+              new ExecError({
+                command: "abort",
+                message: `Aborted: ${signal.reason}`,
+              }),
+            );
+          } else {
+            const onAbort = () => {
+              Effect.runPromise(
+                Deferred.fail(
+                  abortDeferred,
+                  new ExecError({
+                    command: "abort",
+                    message: `Aborted: ${signal.reason}`,
+                  }),
+                ),
+              ).catch(() => {});
+            };
+            signal.addEventListener("abort", onAbort, { once: true });
+            abortCleanup = () => signal.removeEventListener("abort", onAbort);
+          }
+
+          const sandboxHookEffects = (sandboxHooks ?? []).map((hook) => {
+            const timeout = hook.timeoutMs ?? HOOK_TIMEOUT_MS;
+            return Effect.raceFirst(
+              execOk(sandbox, hook.command, {
+                cwd: sandboxRepoDir,
+                sudo: hook.sudo,
+              }).pipe(
+                withTimeout(
+                  timeout,
+                  () =>
+                    new HookTimeoutError({
+                      message: `Hook '${hook.command}' timed out after ${timeout}ms`,
+                      timeoutMs: timeout,
+                      command: hook.command,
+                    }),
+                ),
               ),
-            ).catch(() => {});
-          };
-          signal.addEventListener("abort", onAbort, { once: true });
-          abortCleanup = () => signal.removeEventListener("abort", onAbort);
-        }
+              Deferred.await(abortDeferred) as Effect.Effect<
+                never,
+                ExecError,
+                never
+              >,
+            );
+          });
 
-        const sandboxHookEffects = (sandboxHooks ?? []).map((hook) => {
-          const timeout = hook.timeoutMs ?? HOOK_TIMEOUT_MS;
-          return Effect.raceFirst(
-            execOk(sandbox, hook.command, {
-              cwd: sandboxRepoDir,
-              sudo: hook.sudo,
+          const hostHookEffects = (hostOnSandboxReady ?? []).map((hook) => {
+            const timeout = hook.timeoutMs ?? HOOK_TIMEOUT_MS;
+            return Effect.tryPromise({
+              try: () =>
+                execAsync(hook.command, {
+                  cwd: hostSideWorktreePath,
+                  signal,
+                }),
+              catch: (err) =>
+                new ExecError({
+                  command: hook.command,
+                  message: `Host hook failed: ${hook.command}\n${err instanceof Error ? err.message : String(err)}`,
+                }),
             }).pipe(
               withTimeout(
                 timeout,
                 () =>
                   new HookTimeoutError({
-                    message: `Hook '${hook.command}' timed out after ${timeout}ms`,
+                    message: `Host hook '${hook.command}' timed out after ${timeout}ms`,
                     timeoutMs: timeout,
                     command: hook.command,
                   }),
               ),
-            ),
-            Deferred.await(abortDeferred) as Effect.Effect<
-              never,
-              ExecError,
-              never
-            >,
-          );
-        });
+            );
+          });
 
-        const hostHookEffects = (hostOnSandboxReady ?? []).map((hook) => {
-          const timeout = hook.timeoutMs ?? HOOK_TIMEOUT_MS;
-          return Effect.tryPromise({
-            try: () =>
-              execAsync(hook.command, {
-                cwd: hostSideWorktreePath,
-                signal,
-              }),
-            catch: (err) =>
-              new ExecError({
-                command: hook.command,
-                message: `Host hook failed: ${hook.command}\n${err instanceof Error ? err.message : String(err)}`,
-              }),
-          }).pipe(
-            withTimeout(
-              timeout,
-              () =>
-                new HookTimeoutError({
-                  message: `Host hook '${hook.command}' timed out after ${timeout}ms`,
-                  timeoutMs: timeout,
-                  command: hook.command,
-                }),
-            ),
-          );
-        });
-
-        const allOnSandboxReady = [...sandboxHookEffects, ...hostHookEffects];
-        yield* (
-          allOnSandboxReady.length > 0
-            ? Effect.all(allOnSandboxReady, { concurrency: "unbounded" })
-            : Effect.void
-        ).pipe(Effect.ensuring(Effect.sync(() => abortCleanup?.())));
-      }),
-    );
+          const allOnSandboxReady = [...sandboxHookEffects, ...hostHookEffects];
+          yield* (
+            allOnSandboxReady.length > 0
+              ? Effect.all(allOnSandboxReady, { concurrency: "unbounded" })
+              : Effect.void
+          ).pipe(Effect.ensuring(Effect.sync(() => abortCleanup?.())));
+        }),
+      );
+      initializedSandboxes.add(sandbox);
+    }
 
     const targetBranch = branch ?? resolvedBranch;
 
