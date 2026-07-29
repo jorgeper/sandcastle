@@ -40,11 +40,13 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
+import { basename } from "node:path";
 import { promisify } from "node:util";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { z } from "zod";
 import { parseEnvFile, prSetupGuide, readPrConfig } from "./env.mts";
+import { runInstallScan } from "./install-scan.mts";
 import {
   APPROVED_LABEL,
   classifyIssue,
@@ -430,6 +432,10 @@ const warnUncommittedSkill = async (): Promise<void> => {
 
 await warnUncommittedSkill();
 await nudgeConversationalLanes();
+
+// Image-gap nudge (prd/006): logs modified after this instant belong to
+// this run's scan window.
+const LOOP_START_MS = Date.now();
 
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
@@ -840,6 +846,15 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   await execFileAsync("git", ["push", "origin", TARGET_BRANCH]);
 
   console.log("\nBranches merged.");
+}
+
+// Image-gap nudge (prd/006): scan this run's logs for expensive in-sandbox
+// installs and suggest the Dockerfile fix. Best-effort, never blocks.
+for (const nudge of await runInstallScan(
+  `sandcastle:${basename(process.cwd())}`,
+  LOOP_START_MS,
+)) {
+  console.warn(nudge);
 }
 
 console.log("\nAll done.");

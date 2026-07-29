@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { Effect } from "effect";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -1387,6 +1387,27 @@ describe("InitService scaffold", () => {
       // the hint says how to fix it.
       expect(setup).toContain("issues?per_page=1");
       expect(setup).toContain("regenerate the token");
+    });
+
+    it("main loop and doctor surface the image-gap nudge (prd/006)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const files = await readdir(join(dir, ".sandcastle"));
+      expect(files).toContain("install-scan.mts");
+      expect(files).toContain("install-scan.test.mts");
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      const setup = await readFile(
+        join(dir, ".sandcastle", "setup.mts"),
+        "utf-8",
+      );
+      // Run end: scan this run's logs, tally, nudge. Doctor: show the tally.
+      expect(mainTs).toContain("runInstallScan");
+      expect(setup).toContain("image gaps");
     });
 
     it("doctor and main loop detect an uncommitted implementer skill", async () => {
