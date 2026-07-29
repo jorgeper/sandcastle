@@ -677,6 +677,61 @@ Mechanics and constraints:
 
 The `parallel-planner-goal-with-pr-review` template is the reference workflow: a spec writer distills each issue into a committed spec plus goal statement, and the implementer runs against it in goal mode. See `docs/spikes/goal-mode.md` for the verified runtime behavior.
 
+### Conversations
+
+A **conversation** is a durable, turn-based exchange between a human and an agent running headless in a sandbox. Use it for workflows where the agent needs the human's decisions along the way — an interview that produces a PRD, a proposed issue breakdown that needs approval — without driving the agent's TUI by hand:
+
+```ts
+import { conversation, claudeCode } from "@ai-hero/sandcastle";
+import { chat } from "@ai-hero/sandcastle/chat";
+import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+
+// Turn 1: runs the opening (role) prompt, resolves after the first envelope
+const convo = await conversation.start({
+  name: "design-notifications",
+  role: "designer",
+  agent: claudeCode("claude-opus-4-8"), // v1: claudeCode only
+  sandbox: docker(),
+  promptFile: ".sandcastle/designer-prompt.md",
+  promptArgs: { TOPIC: "notifications" },
+});
+
+// Each turn is one resumed iteration of the same agent session
+const turn = await convo.send("Mobile first, web later");
+
+// Or hand the conversation to the reference chat frontend (Ink terminal UI)
+await chat(convo);
+
+// From another process, later:
+const reattached = await conversation.open("design-notifications", {
+  agent: claudeCode("claude-opus-4-8"),
+  sandbox: docker(),
+});
+const summaries = await conversation.list(); // for pickers / observability
+```
+
+**The turn envelope.** The agent ends every turn with exactly one typed envelope, emitted as structured output in a `<turn>` tag:
+
+- `{ type: "ask", message, options? }` — a question; `options` renders as a select menu (CLI) or buttons (a future Telegram frontend).
+- `{ type: "propose", message }` — a draft for review. Frontends offer **approve** (sends the canonical `APPROVED` message) or free-text feedback; the agent must not act on a proposal until it receives `APPROVED`.
+- `{ type: "done", message, artifacts }` — completion, with artifact URLs (PRs, issues). `send()` on a done conversation reopens it.
+
+The protocol instructions are library-owned and appended to the opening prompt by `conversation.start()` — role prompts carry only role methodology. An invalid or missing envelope gets one automatic corrective resume; if it fails again, the turn fails and the conversation is marked `failed` (re-attachable via `recover()`).
+
+**The store is the source of truth.** Everything lives under `.sandcastle/conversations/<id>/`: `conversation.json` (status, session id, branch, log path, artifacts) and an append-only `messages.jsonl` transcript. Human messages are persisted _before_ the agent runs, so a killed process never loses a turn — `open()` + `recover()` re-runs the unanswered message. Frontends are stateless renderers over the store, which is what makes a future daemon gateway (Telegram on a VPS) a new frontend rather than a redesign.
+
+**The chat frontend.** `chat(convo)` from `@ai-hero/sandcastle/chat` (a separate subpath — the core library does not depend on ink/react) runs a full-screen Ink chat UI: transcript with markdown-rendered proposals, arrow-key selects for options, a live activity line streaming the agent's tool calls while it works, and a status bar. Ctrl-C detaches; the conversation is durable. Non-TTY stdout falls back to plain line-based prompts.
+
+Mechanics and constraints:
+
+- Each turn is one iteration against the branch `conversation/<id>` (worktree reused across turns and processes) and session resume — conversations require filesystem-backed sessions, so only `claudeCode` is supported in v1; other providers throw `ConversationNotSupportedError`.
+- While a process holds the conversation, one sandbox is kept alive across turns (`keepSandbox`, default `true`) so interactive chat doesn't pay container startup per turn. `close()` — called automatically when `chat()` exits or you detach — tears down the container only; the worktree, store, and agent session persist. Set `keepSandbox: false` for a fresh sandbox per turn.
+- Captured agent sessions live in Claude Code's native store (`~/.claude/projects/…`) and are subject to its `cleanupPeriodDays` retention (default 30 days): a conversation dormant past that window keeps its transcript and worktree but can no longer resume the agent's context.
+- Concurrent `send()` on the same conversation fails fast (worktree lock).
+- `promptArgs` substitution is applied host-side to the opening prompt; shell (`` !`cmd` ``) expansion is not.
+
+The `conversational-prd` template is the reference workflow: `design.ts` grills you into a PRD over a conversation and opens a PR (then keeps addressing your PR comments through the same conversation until approval), and `decompose.ts` turns the merged PRD into Sandcastle-labeled issues after you approve the breakdown.
+
 ### Early termination with `<promise>COMPLETE</promise>`
 
 When the agent outputs `<promise>COMPLETE</promise>`, the orchestrator stops the iteration loop early. This is a convention you document in your prompt for the agent to follow — the engine never injects it.

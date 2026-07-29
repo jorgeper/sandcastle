@@ -294,6 +294,9 @@ export interface AgentSessionStorage {
 
 export interface AgentProvider {
   readonly name: string;
+  /** Model identifier the provider was constructed with, when known. Recorded
+   *  in conversation metadata so re-attach can flag a model mismatch. */
+  readonly model?: string;
   /** Environment variables injected by this agent provider. Merged at launch time with env resolver and sandbox provider env. */
   readonly env: Record<string, string>;
   /** When true, session capture is enabled for this provider. Default: true for Claude Code, false for others. */
@@ -1220,6 +1223,7 @@ export const claudeCode = (
   options?: ClaudeCodeOptions,
 ): AgentProvider & { readonly sessionStorage: AgentSessionStorage } => ({
   name: "claude-code",
+  model,
   env: options?.env ?? {},
   captureSessions: options?.captureSessions ?? true,
   sessionStorage: makeClaudeSessionStorage(options),

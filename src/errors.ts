@@ -189,6 +189,20 @@ export class GoalNotSupportedError extends Data.TaggedError(
   readonly provider: string;
 }> {}
 
+/** The agent provider cannot hold conversations (`conversation.start()`). */
+export class ConversationNotSupportedError extends Data.TaggedError(
+  "ConversationNotSupportedError",
+)<{
+  readonly message: string;
+  /** Name of the provider that lacks conversation support. */
+  readonly provider: string;
+  /** The capability the provider is missing. */
+  readonly missing:
+    | "session-resume"
+    | "structured-output"
+    | "unsupported-provider";
+}> {}
+
 /** Session capture (read, rewrite, or write) failed */
 export class SessionCaptureError extends Data.TaggedError(
   "SessionCaptureError",
