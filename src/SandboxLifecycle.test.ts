@@ -1536,3 +1536,89 @@ describe("runHostHooks", () => {
     expect(content.trim()).toBe("ok");
   });
 });
+
+describe("withSandboxLifecycle (sandbox reuse)", () => {
+  const setupWorktree = async () => {
+    const hostDir = await mkdtemp(join(tmpdir(), "host-"));
+    await initRepo(hostDir);
+    await commitFile(hostDir, "file.txt", "original", "initial commit");
+    const worktreesDir = join(hostDir, ".sandcastle", "worktrees");
+    await mkdir(worktreesDir, { recursive: true });
+    const worktreeDir = join(worktreesDir, "reuse-worktree");
+    await execAsync(
+      `git worktree add -b "sandcastle/reuse" "${worktreeDir}" HEAD`,
+      { cwd: hostDir },
+    );
+    return { hostDir, worktreeDir };
+  };
+
+  const makeRecordingSandbox = (worktreeDir: string) => {
+    const commands: string[] = [];
+    const base = makeLocalSandbox(worktreeDir);
+    const sandbox: SandboxService = {
+      exec: (command, options) => {
+        commands.push(command);
+        return base.exec(command, options);
+      },
+      copyIn: (hp, sp) => base.copyIn(hp, sp),
+      copyFileOut: (sp, hp) => base.copyFileOut(sp, hp),
+    };
+    return { sandbox, commands };
+  };
+
+  const runLifecycle = (
+    hostDir: string,
+    worktreeDir: string,
+    sandbox: SandboxService,
+    ref: Ref.Ref<ReadonlyArray<DisplayEntry>>,
+  ) =>
+    Effect.runPromise(
+      withSandboxLifecycle(
+        { hostRepoDir: hostDir, sandboxRepoDir: worktreeDir },
+        sandbox,
+        () => Effect.void,
+      ).pipe(Effect.provide(SilentDisplay.layer(ref))),
+    );
+
+  it("skips git setup when the same sandbox handle is used again", async () => {
+    const { hostDir, worktreeDir } = await setupWorktree();
+    const { sandbox, commands } = makeRecordingSandbox(worktreeDir);
+    const ref = Ref.unsafeMake<ReadonlyArray<DisplayEntry>>([]);
+
+    await runLifecycle(hostDir, worktreeDir, sandbox, ref);
+    expect(commands.filter((c) => c.includes("safe.directory")).length).toBe(1);
+
+    commands.length = 0;
+    await runLifecycle(hostDir, worktreeDir, sandbox, ref);
+    expect(commands.filter((c) => c.includes("safe.directory")).length).toBe(0);
+
+    const entries = await Effect.runPromise(Ref.get(ref));
+    // First pass says the sandbox is new; second pass subtly notes reuse.
+    expect(
+      entries.some(
+        (e) =>
+          e._tag === "taskLog" &&
+          e.title.includes("Setting up sandbox (new container)"),
+      ),
+    ).toBe(true);
+    expect(
+      entries.some(
+        (e) => e._tag === "text" && e.message.includes("Reusing live sandbox"),
+      ),
+    ).toBe(true);
+  });
+
+  it("a different sandbox handle re-runs setup even for the same repo", async () => {
+    const { hostDir, worktreeDir } = await setupWorktree();
+    const ref = Ref.unsafeMake<ReadonlyArray<DisplayEntry>>([]);
+
+    const first = makeRecordingSandbox(worktreeDir);
+    await runLifecycle(hostDir, worktreeDir, first.sandbox, ref);
+
+    const second = makeRecordingSandbox(worktreeDir);
+    await runLifecycle(hostDir, worktreeDir, second.sandbox, ref);
+    expect(
+      second.commands.filter((c) => c.includes("safe.directory")).length,
+    ).toBe(1);
+  });
+});

@@ -6,6 +6,19 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Reuse-aware sandbox setup (`feat/reuse-aware-sandbox-setup`)
+
+`withSandboxLifecycle` replayed its setup phase (git safe.directory,
+identity propagation, onSandboxReady hooks) on every run handed to it —
+including every turn of a keep-alive conversation, where the same
+container was being "set up" again and again and the logs made each turn
+look like a fresh sandbox launch. Setup now runs once per live sandbox
+handle (tracked by handle identity in a `WeakSet` — handles live exactly
+as long as their container, so fresh containers always re-run setup),
+and the logs say which case occurred: "Setting up sandbox (new
+container)" vs. "Reusing live sandbox (setup already done)". Found
+watching per-turn logs in the design lane during a real onboarding.
+
 ## Summarized titles for raw reports (`feat/design-title-summary`)
 
 Filing a design topic put the entire dictated paragraph into the issue
