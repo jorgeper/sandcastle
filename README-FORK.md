@@ -6,6 +6,43 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Conversation gateway: designer & decomposer agents (`feat/conversation-gateway`)
+
+Adds a way to _talk to_ sandboxed agents instead of driving Claude Code's
+TUI by hand (spec: `prd/004-conversation-gateway.md`, decision record:
+ADR 0022). Motivation: creating a PRD meant running the `/new-prd` and
+`/decompose-prd` skills interactively; the goal is to reach agents only
+through gateways (a chat CLI today, Telegram on a VPS later) so the whole
+pipeline — design → decompose → implement — runs as sandboxed agents.
+
+**What was added**
+
+- Engine: `conversation.start()/open()/send()/list()` — durable, turn-based
+  conversations built entirely from existing machinery (`run()` +
+  `resumeSession` + structured output; one iteration per turn on branch
+  `conversation/<id>`). The agent ends every turn with a typed turn
+  envelope (`ask` / `propose` / `done`); protocol instructions are
+  library-owned and appended to the opening prompt (`composeGoalPrompt`
+  precedent). The store (`.sandcastle/conversations/<id>/`,
+  `conversation.json` + append-only `messages.jsonl`) is the source of
+  truth: human messages persist before the agent runs, so a killed process
+  re-attaches via `open()` + `recover()` without losing or double-sending
+  a turn. v1 is claudeCode-only; others throw
+  `ConversationNotSupportedError` (Effect-free wrapper, `CwdError`
+  pattern).
+- Frontend: `chat(convo)` on the new `@ai-hero/sandcastle/chat` subpath —
+  an Ink 7 chat TUI (transcript replayed from the store, markdown
+  proposals, option select menus, approve/feedback flow, live agent
+  activity stream, non-TTY fallback). Frontends are stateless renderers
+  over the store, which is what makes the future Telegram daemon a new
+  frontend rather than a redesign.
+- Template `conversational-prd`: `design.ts` (designer agent grills you
+  into a PRD, opens the PRD PR, then addresses your PR comments through
+  the same conversation until approval/merge — PR thread as a second
+  transport) and `decompose.ts` (decomposer proposes the parent/sub-issue
+  breakdown and creates Sandcastle-labeled issues only after the canonical
+  `APPROVED` message). Stage 3 stays the existing issue-driven main loop.
+
 ## Goal mode: native /goal-driven implementer (`feat/goal-mode`)
 
 Replaces "spawn 100 fresh agents and substring-match their own completion
