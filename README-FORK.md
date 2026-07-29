@@ -6,19 +6,6 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
-## Reuse-aware sandbox setup (`feat/reuse-aware-sandbox-setup`)
-
-`withSandboxLifecycle` replayed its setup phase (git safe.directory,
-identity propagation, onSandboxReady hooks) on every run handed to it —
-including every turn of a keep-alive conversation, where the same
-container was being "set up" again and again and the logs made each turn
-look like a fresh sandbox launch. Setup now runs once per live sandbox
-handle (tracked by handle identity in a `WeakSet` — handles live exactly
-as long as their container, so fresh containers always re-run setup),
-and the logs say which case occurred: "Setting up sandbox (new
-container)" vs. "Reusing live sandbox (setup already done)". Found
-watching per-turn logs in the design lane during a real onboarding.
-
 ## Spec links resolve in every mode (`feat/spec-link-push`)
 
 The spec writer posts a SHA-pinned `blob/<sha>` link on the issue, but the
@@ -44,6 +31,19 @@ with a concrete fix hint (regenerate with Contents + Issues + Pull
 requests R/W). Found when the designer hit exactly this during a real
 onboarding.
 
+## Reuse-aware sandbox setup (`feat/reuse-aware-sandbox-setup`)
+
+`withSandboxLifecycle` replayed its setup phase (git safe.directory,
+identity propagation, onSandboxReady hooks) on every run handed to it —
+including every turn of a keep-alive conversation, where the same
+container was being "set up" again and again and the logs made each turn
+look like a fresh sandbox launch. Setup now runs once per live sandbox
+handle (tracked by handle identity in a `WeakSet` — handles live exactly
+as long as their container, so fresh containers always re-run setup),
+and the logs say which case occurred: "Setting up sandbox (new
+container)" vs. "Reusing live sandbox (setup already done)". Found
+watching per-turn logs in the design lane during a real onboarding.
+
 ## Summarized titles for raw reports (`feat/design-title-summary`)
 
 Filing a design topic put the entire dictated paragraph into the issue
@@ -68,8 +68,9 @@ comments. The filer now reads the full thread first
 `--comments`. Both prompts note that image attachments may not download
 from the sandbox — the filer asks what a load-bearing screenshot shows
 (without spending its question budget); actual image support is tracked
-as a follow-up issue. The designer already read the thread; the planner
-already received comment bodies in its issue list.
+in [#3](https://github.com/jorgeper/sandcastle/issues/3). The designer
+already read the thread; the planner already received comment bodies in
+its issue list.
 
 ## Filer grounds lightly — locate, don't verify (`feat/filer-locate-dont-verify`)
 
