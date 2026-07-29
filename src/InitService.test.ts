@@ -1412,6 +1412,33 @@ describe("InitService scaffold", () => {
       expect(setup).toContain("scanLogs(0)");
     });
 
+    it("the merge pipeline works on any default branch and the reviewer runs (issue-7 circle)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      const spec = await readFile(
+        join(dir, ".sandcastle", "spec-prompt.md"),
+        "utf-8",
+      );
+      // TARGET_BRANCH was hardcoded "master": on a main-based repo
+      // branchAhead() was always false, stranding implemented branches
+      // forever. Derive it from the branch the loop runs on.
+      expect(mainTs).not.toContain('TARGET_BRANCH = "master"');
+      expect(mainTs).toMatch(/TARGET_BRANCH[\s\S]{0,120}rev-parse/);
+      // TARGET_BRANCH is a reserved built-in prompt arg: passing it in
+      // promptArgs made the reviewer run throw before logging anything,
+      // rejecting the whole dispatch after a successful implement.
+      expect(mainTs).not.toMatch(/promptArgs:\s*\{[^}]*TARGET_BRANCH/);
+      // Goals must reference commands that exist: `npm run test` in a repo
+      // with only test:unit/test:e2e is unsatisfiable as written.
+      expect(spec).toContain("package.json");
+    });
+
     it("doctor and main loop detect an uncommitted implementer skill", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {

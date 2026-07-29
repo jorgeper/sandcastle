@@ -122,7 +122,13 @@ const MAX_DEBATE_ROUNDS = 3;
 const PR_LABEL = github.REQUIRE_PR_LABEL;
 
 // The branch merges target and PRs diff against.
-const TARGET_BRANCH = "master";
+// The branch the loop runs on — merges, pushes, and the merge phase's
+// branchAhead() all anchor here. Derived, never hardcoded: a "master"
+// default silently stranded every implemented branch on main-based repos
+// (branchAhead was always false, so nothing ever merged).
+const TARGET_BRANCH = (
+  await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"])
+).stdout.trim();
 
 // When true, PR/issue markers carry full provenance: **[agent · harness ·
 // model]**. Set false for plain **[agent]** markers. Turn-taking parses the
@@ -522,10 +528,12 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         maxIterations: 10,
         agent: sandcastle.claudeCode("claude-opus-4-8"),
         promptFile: "./.sandcastle/pr-conflict-prompt.md",
+        // TARGET_BRANCH is a built-in prompt arg (injected by run()) —
+        // passing it in promptArgs is a PromptError that kills the run
+        // before it logs anything.
         promptArgs: {
           AGENT_NAME: "conflict-resolver",
           BRANCH: branch,
-          TARGET_BRANCH,
         },
       });
       await pushBranch(sandbox.worktreePath, branch);
@@ -709,7 +717,8 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
             maxIterations: 1,
             agent: sandcastle.claudeCode("claude-opus-4-8"),
             promptFile: "./.sandcastle/review-prompt.md",
-            promptArgs: { TASK_ID: issue.id, BRANCH: issue.branch, TARGET_BRANCH },
+            // TARGET_BRANCH reaches the prompt via the built-in arg.
+            promptArgs: { TASK_ID: issue.id, BRANCH: issue.branch },
           });
           return {
             ...review,
