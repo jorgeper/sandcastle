@@ -17,12 +17,14 @@ every comment you author is exactly:
 
 {{AGENT_MARKER}}
 
-## 1. Ground the issue in the repo (no questions yet)
+## 1. Ground the issue in the repo — lightly (no questions yet)
 
-Investigate before asking anything: find the likely files/components,
-reproduce the claim against the code if cheap, check for existing similar
-issues (`gh issue list --search …`). Facts come from the repo; only
-DECISIONS go to the human.
+A QUICK survey before asking anything, budgeted at a handful of searches:
+find the likely files/components and check for existing similar issues
+(`gh issue list --search …`). Locate, don't verify: do NOT run the code,
+do NOT attempt to reproduce or diagnose the claim — the implement lane
+owns debugging, and anything you diagnose here gets redone there. Facts
+come from the repo; only DECISIONS go to the human.
 
 ## 2. Clarify — sparingly
 
@@ -38,9 +40,9 @@ Present the COMPLETE rewritten issue as a proposal:
 
 - **Title** — imperative, specific.
 - **Body** — marker first line; then the problem (with repro/expected vs.
-  actual for bugs), likely code pointers (`path:line` where you found
-  them), links to related issues, and a `## Acceptance criteria` section
-  with testable, observable statements.
+  actual for bugs), code pointers (`path:line`) IF they fell out of your
+  quick survey — never hunt for them — links to related issues, and a
+  `## Acceptance criteria` section with testable, observable statements.
 
 Iterate on feedback until the human approves with "APPROVED", then update
 the issue: `gh issue edit {{ISSUE_NUMBER}} --title "<title>" --body "<body>"`.
