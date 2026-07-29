@@ -53,6 +53,46 @@ export type {
 } from "./Output.js";
 export { CwdError } from "./CwdError.js";
 export { GoalNotSupportedError } from "./GoalNotSupportedError.js";
+export { ConversationNotSupportedError } from "./ConversationNotSupportedError.js";
+export {
+  conversation,
+  ConversationError,
+  conversationBranch,
+} from "./conversation.js";
+export type {
+  Conversation,
+  ConversationStartOptions,
+  ConversationOpenOptions,
+  ConversationSendOptions,
+  ConversationListOptions,
+} from "./conversation.js";
+export {
+  TURN_TAG,
+  APPROVED_MESSAGE,
+  CONVERSATION_PROTOCOL_INSTRUCTIONS,
+  composeConversationProtocol,
+  validateAgentTurn,
+  agentTurnSchema,
+} from "./conversationEnvelope.js";
+export type {
+  AgentTurn,
+  AgentTurnAsk,
+  AgentTurnPropose,
+  AgentTurnDone,
+} from "./conversationEnvelope.js";
+export {
+  defaultConversationsDir,
+  pendingHumanMessage,
+} from "./ConversationStore.js";
+export type {
+  ConversationStatus,
+  ConversationMetadata,
+  ConversationMessage,
+  ConversationSummary,
+  ConversationAgentInfo,
+  HumanMessage,
+  AgentMessage,
+} from "./ConversationStore.js";
 export {
   claudeCode,
   codex,

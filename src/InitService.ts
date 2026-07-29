@@ -68,6 +68,11 @@ const TEMPLATES: TemplateMetadata[] = [
       "Like parallel-planner-with-pr-review, but every issue gets a committed spec and the implementer runs in goal mode: Claude Code's native /goal turn loop self-verifies each attempt, with fresh-context retries between attempts",
     dependencies: ["zod"],
   },
+  {
+    name: "conversational-prd",
+    description:
+      "Designer and decomposer agents you talk to through a chat CLI: design.ts grills you into a PRD and opens a PR, decompose.ts turns the merged PRD into Sandcastle-labeled issues",
+  },
 ];
 
 export const listTemplates = (): TemplateMetadata[] => TEMPLATES;

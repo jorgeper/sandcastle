@@ -160,6 +160,28 @@ _Avoid_: "command" (overloaded), "inline command", "prompt command"
 A **prompt argument** that Sandcastle injects automatically -- not provided by the user via `promptArgs`.
 _Avoid_: "system variable", "auto argument", "default prompt argument"
 
+### Conversations
+
+**Conversation**:
+A durable, turn-based exchange between a human and an **agent** running headless in a **sandbox**, created via `conversation.start()`. State lives in the **conversation store**, the conversation's worktree (branch `conversation/<id>`), and the filesystem-backed **agent session** — so any process can re-attach via `conversation.open()`.
+_Avoid_: "chat" (that's the reference **frontend**, not the primitive), "session" (collides with **agent session**), "dialogue"
+
+**Conversation turn**:
+One human message plus the single resumed **iteration** that answers it (the opening prompt counts as the first turn). Distinct from goal mode's inner turns, which are multiple agent turns inside one **iteration**; a conversation turn is exactly one iteration ending in a **turn envelope**.
+_Avoid_: "exchange", "round", conflating with goal-mode turns
+
+**Turn envelope**:
+The typed **structured output** (`<turn>` tag) every **conversation turn** ends with: `ask` (a question, optionally with options), `propose` (a draft awaiting `APPROVED` or feedback), or `done` (completion with artifacts). Library-owned: the schema and the protocol instructions appended to the opening prompt are versioned together.
+_Avoid_: "turn payload", "reply object", "message envelope"
+
+**Conversation store**:
+The per-conversation directory `.sandcastle/conversations/<id>/` holding `conversation.json` (metadata: status, session id, branch, log path, artifacts) and the append-only `messages.jsonl` transcript. The source of truth — human messages are persisted before the **agent** runs, and **frontends** are stateless renderers over it.
+_Avoid_: "conversation log" (that's the agent log file), "history", "database"
+
+**Frontend**:
+A renderer/input adapter over a **conversation** — the Ink chat TUI (`@ai-hero/sandcastle/chat`) today; a Telegram daemon later. Frontends hold no state: everything they display is replayed from the **conversation store**.
+_Avoid_: "gateway" (the transport-agnostic conversation layer as a whole, not one renderer), "UI client", "interface"
+
 ### Hooks
 
 **Host hook**:
