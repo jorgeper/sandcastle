@@ -59,13 +59,17 @@ every PR comment/reply you author is exactly:
 3. `git push -u origin prd/NNN-<slug>`
 4. `gh pr create --title "PRD NNN: <title>" --body "<marker line, then a
 one-paragraph summary>"`
-5. `git checkout <conversation branch>` — always return to the conversation
+5. Mark it as awaiting the owner's approval, matching the Sandcastle
+   PR-review convention: `gh pr edit <pr-url> --add-label "sandcastle:ready"`
+   (skip without failing if the label doesn't exist in this repo).
+6. `git checkout <conversation branch>` — always return to the conversation
    branch afterwards.
-6. Finish with a completion envelope:
+7. Finish with a completion envelope:
    - artifacts: the PR URL AND the PRD file path (e.g. `prd/NNN-<slug>.md`).
    - message: a one-line summary, then guide the human's next move:
-     they can comment on the PR (you will address it and reply), or merge
-     the PR to approve; after merging, the next step is
+     they can comment on the PR (you will address it and reply), or approve
+     it by adding the `sandcastle:approved` label — the watcher script then
+     merges the PR, and the next step is
      `npx tsx .sandcastle/decompose.ts prd/NNN-<slug>.md`.
 
 ## Phase 4 — PR feedback
@@ -81,4 +85,5 @@ For each batch:
 4. Return to the conversation branch.
 5. Finish with a completion envelope carrying the PR URL and PRD file path
    again; the message summarizes what you changed and repeats the next-move
-   guidance (comment again, or merge to approve and then decompose).
+   guidance (comment again, or add the `sandcastle:approved` label — the
+   watcher merges and the next step is decompose).

@@ -58,9 +58,11 @@ describe("conversational-prd template", () => {
       expect(script).toContain("conversation.");
       expect(script).toContain("chat(");
     }
-    // design.ts drives phase B (PR feedback) from the host.
+    // design.ts drives phase B (PR feedback) from the host, with the same
+    // label-gated approval + script-side merge as the main loop.
     expect(design).toContain("PR feedback");
-    expect(design).toContain("reviewDecision");
+    expect(design).toContain("sandcastle:approved");
+    expect(design).toContain("pr merge");
   });
 
   it("role prompts contain methodology, not protocol mechanics", async () => {

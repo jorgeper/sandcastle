@@ -143,14 +143,14 @@ console.log(
   "  • Comment on the PR: I'll pick it up here and the designer will push revisions and reply.",
 );
 console.log(
-  `  • Approve it by merging (you authored the PR via the agent, so merging IS approval):`,
+  "  • Approve it with the same label gate as the main loop — I'll merge it for you:",
 );
-console.log(`      gh pr merge ${prUrl} --squash --delete-branch`);
+console.log(`      gh pr edit ${prUrl} --add-label "sandcastle:approved"`);
 console.log(
-  `\nAfter merging, the next step is:\n      npx tsx .sandcastle/decompose.ts ${prdFileOf(convo) ?? "prd/<file>.md"}`,
+  `\nAfter the merge, the next step is:\n      npx tsx .sandcastle/decompose.ts ${prdFileOf(convo) ?? "prd/<file>.md"}`,
 );
 console.log(
-  `\nWatching ${prUrl} for feedback (Ctrl-C to detach; re-run to resume)…`,
+  `\nWatching ${prUrl} for feedback and approval (Ctrl-C to detach; re-run to resume)…`,
 );
 
 // The keep-alive sandbox stays up between polls; tear it down on Ctrl-C so
@@ -185,22 +185,46 @@ interface PrComment {
   state?: string;
 }
 
+const nextStep = () =>
+  `npx tsx .sandcastle/decompose.ts ${prdFileOf(convo) ?? "prd/<file>.md"}`;
+
 for (;;) {
   const view = JSON.parse(
-    gh(`pr view ${prUrl} --json state,reviewDecision,comments,reviews`),
+    gh(`pr view ${prUrl} --json state,reviewDecision,comments,reviews,labels`),
   ) as {
     state: string;
     reviewDecision: string;
     comments: PrComment[];
     reviews: PrComment[];
+    labels: Array<{ name?: string }>;
   };
-  if (view.state !== "OPEN" || view.reviewDecision === "APPROVED") {
+  if (view.state !== "OPEN") {
+    // Manual merge/close still honored as a fallback.
     console.log(
       view.state === "MERGED"
-        ? `PR merged — next step:\n  npx tsx .sandcastle/decompose.ts ${prdFileOf(convo) ?? "prd/<file>.md"}`
-        : `PR is ${view.reviewDecision === "APPROVED" ? "approved" : view.state.toLowerCase()}.`,
+        ? `PR merged — next step:\n  ${nextStep()}`
+        : `PR is ${view.state.toLowerCase()}.`,
     );
     break;
+  }
+
+  // Approval gate — same convention as the main loop's implement/review
+  // flow: the owner adds sandcastle:approved (or formally approves), and
+  // the orchestration merges. Merging stays in the script, never the agent.
+  const approved =
+    view.labels.some((l) => l.name === "sandcastle:approved") ||
+    view.reviewDecision === "APPROVED";
+  if (approved) {
+    console.log("\nsandcastle:approved — merging the PRD PR…");
+    try {
+      gh(`pr merge ${prUrl} --squash --delete-branch`);
+      console.log(`Merged. Next step:\n  ${nextStep()}`);
+      break;
+    } catch (error) {
+      console.error(
+        `Merge failed (${error instanceof Error ? error.message.split("\n", 1)[0] : error}); retrying next poll.`,
+      );
+    }
   }
 
   const cutoff = readFeedbackState().lastProcessedAt;
@@ -227,7 +251,7 @@ for (;;) {
     );
     console.log(`Designer: ${turn.message.split("\n", 1)[0]}`);
     console.log(
-      "(reply on the PR again, or merge it when you're satisfied — still watching)",
+      '(reply on the PR again, or add the "sandcastle:approved" label when satisfied — still watching)',
     );
   } else {
     process.stdout.write(".");
