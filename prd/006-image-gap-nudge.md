@@ -69,9 +69,13 @@ solved problems.
      bake it into .sandcastle/Dockerfile and rebuild: npx sandcastle docker build-image
    ```
 
-2. **Doctor:** an "image gaps" check — ✓ "no recurring in-sandbox
-   installs" when the tally is empty, ✗ listing the tallied signatures
-   with the same Dockerfile hint when it isn't.
+2. **Doctor:** an "image gaps" check merging two sources — the cross-run
+   tally, and a **live scan of all logs** (no time window). The tally
+   alone is written only at the end of a completed loop run, so without
+   the live scan an interrupted or still-running loop hides the evidence
+   exactly when the owner is running doctor to investigate (found in
+   testing). Un-tallied live detections are marked "(in logs, not yet
+   tallied)".
 
 A prompt-side companion (implementer skill line: "if you had to install a
 system-level tool, say so in your issue comment") is deferred — the log

@@ -132,14 +132,10 @@ const currentImageId = async (imageName: string): Promise<string> => {
   return stdout.trim();
 };
 
-/** Scan logs modified since `sinceMs` (conversation logs excluded — their
- *  keep-alive sandboxes amortize installs across turns), update the tally,
- *  and return the nudge lines to print. Best-effort: returns [] on any
- *  failure. */
-export const runInstallScan = async (
-  imageName: string,
-  sinceMs: number,
-): Promise<string[]> => {
+/** Detections across all non-conversation logs modified since `sinceMs`
+ *  (0 = all history — the doctor's live view, so interrupted or in-flight
+ *  runs still surface). Best-effort: [] on any failure. */
+export const scanLogs = (sinceMs = 0): InstallDetection[] => {
   try {
     if (!existsSync(LOGS_DIR)) return [];
     const detections = new Map<string, InstallDetection>();
@@ -151,6 +147,22 @@ export const runInstallScan = async (
         if (!detections.has(d.key)) detections.set(d.key, d);
       }
     }
+    return [...detections.values()];
+  } catch {
+    return [];
+  }
+};
+
+/** Run-end path: scan this run's logs, update the tally, return the nudge
+ *  lines to print. Best-effort: returns [] on any failure. */
+export const runInstallScan = async (
+  imageName: string,
+  sinceMs: number,
+): Promise<string[]> => {
+  try {
+    const detections = new Map<string, InstallDetection>(
+      scanLogs(sinceMs).map((d) => [d.key, d]),
+    );
     if (detections.size === 0) return [];
     const imageId = await currentImageId(imageName);
     const tally = updateTally(readTally(), imageId, [...detections.values()]);

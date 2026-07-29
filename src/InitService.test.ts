@@ -1405,9 +1405,11 @@ describe("InitService scaffold", () => {
         join(dir, ".sandcastle", "setup.mts"),
         "utf-8",
       );
-      // Run end: scan this run's logs, tally, nudge. Doctor: show the tally.
+      // Run end: scan this run's logs, tally, nudge. Doctor: merge the tally
+      // with a LIVE log scan, so interrupted/in-flight runs still surface.
       expect(mainTs).toContain("runInstallScan");
       expect(setup).toContain("image gaps");
+      expect(setup).toContain("scanLogs(0)");
     });
 
     it("doctor and main loop detect an uncommitted implementer skill", async () => {

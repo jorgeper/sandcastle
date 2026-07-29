@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { parseEnvFile } from "./env.mts";
 import * as github from "./github.mts";
-import { readTally } from "./install-scan.mts";
+import { readTally, scanLogs } from "./install-scan.mts";
 
 const execFileAsync = promisify(execFile);
 
@@ -219,21 +219,26 @@ export const runDoctor = async (): Promise<number> => {
   });
 
   await check("image gaps", async () => {
-    // Filled by the main loop's post-run log scan (prd/006): recurring
-    // in-sandbox installs mean the Dockerfile is missing toolchain the
-    // agents keep needing. Resets automatically when the image is rebuilt.
+    // In-sandbox installs mean the Dockerfile is missing toolchain the
+    // agents keep needing (prd/006). Two sources, merged: the cross-run
+    // tally the loop writes at run end, and a LIVE scan of all logs — so
+    // an interrupted or still-running loop can't hide the evidence.
+    // Rebuilding the image resets the tally.
     const tally = readTally();
-    const entries = Object.entries(tally?.entries ?? {});
-    if (entries.length === 0) {
-      return { ok: true, detail: "no recurring in-sandbox installs recorded" };
+    const found = new Map<string, string>();
+    for (const [key, e] of Object.entries(tally?.entries ?? {})) {
+      found.set(key, `${key} (${e.runs} run${e.runs !== 1 ? "s" : ""})`);
     }
-    const list = entries
-      .map(([key, e]) => `${key} (${e.runs} run${e.runs !== 1 ? "s" : ""})`)
-      .join(", ");
+    for (const d of scanLogs(0)) {
+      if (!found.has(d.key)) found.set(d.key, `${d.key} (in logs, not yet tallied)`);
+    }
+    if (found.size === 0) {
+      return { ok: true, detail: "no in-sandbox installs found in tally or logs" };
+    }
     return {
       ok: false,
-      detail: `agents keep installing inside sandboxes: ${list}`,
-      hint: "bake these into .sandcastle/Dockerfile, then `npx sandcastle docker build-image` (rebuilding resets this check)",
+      detail: `agents install inside sandboxes: ${[...found.values()].join(", ")}`,
+      hint: "bake these into .sandcastle/Dockerfile, then `npx sandcastle docker build-image` (rebuilding resets the tally)",
     };
   });
 
