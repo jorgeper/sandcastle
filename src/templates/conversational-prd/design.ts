@@ -1,7 +1,5 @@
-import { execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import * as readline from "node:readline/promises";
 import {
   claudeCode,
   conversation,
@@ -9,111 +7,129 @@ import {
 } from "@ai-hero/sandcastle";
 import { chat } from "@ai-hero/sandcastle/chat";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import {
+  MODEL,
+  DESIGN_LABEL,
+  DECOMPOSE_LABEL,
+  IMPLEMENT_LABEL,
+  markerFor,
+  ask,
+  sleep,
+  gh,
+  ghJson,
+  ensureLabel,
+  listOpenIssues,
+  getIssue,
+  createIssue,
+  commentOnIssue,
+  findIssueByTitle,
+  decomposeIssueTitle,
+  laneNudge,
+} from "./shared.ts";
 
-// Designer: grills you into a PRD over a chat conversation, opens a PR with
-// the result, then keeps addressing your PR comments until the PR is
-// approved or merged.
+// Designer lane: a design issue in → grilling conversation → PRD PR →
+// label-gated merge → decompose issue out.
 //
-// Run with:   npx tsx .sandcastle/design.ts "my feature idea"
-// Re-attach:  npx tsx .sandcastle/design.ts          (lists open designs)
+//   npx tsx .sandcastle/design.ts "my feature idea"   # auto-creates the issue
+//   npx tsx .sandcastle/design.ts --issue 41          # pick up a labeled issue
+//   npx tsx .sandcastle/design.ts                     # picker
 //
 // Ctrl-C is always safe — the conversation is durable and re-attaches.
 
-const MODEL = "claude-opus-4-8";
 const agent = claudeCode(MODEL);
 const sandbox = docker();
-
-/** Marker prefixed to everything the designer writes on GitHub on the
- *  human's behalf (PR body, PR replies): [agent · harness · model]. */
-const AGENT_MARKER = `**[designer · claude-code · ${MODEL}]**`;
+const AGENT_MARKER = markerFor("designer");
 const POLL_SECONDS = 30;
+const ANCHOR_TEXT = "Designer conversation started";
 
-const slugify = (text: string): string =>
-  text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
+// --- Resolve the design issue -------------------------------------------------
 
-const ask = async (question: string): Promise<string> => {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+ensureLabel(DESIGN_LABEL, "Needs a PRD; grill the owner");
+
+const args = process.argv.slice(2);
+let issueNumber: number;
+
+if (args[0] === "--issue" && args[1]) {
+  issueNumber = Number.parseInt(args[1], 10);
+} else if (args.length > 0) {
+  const topic = args.join(" ").trim();
+  console.log(`Filing a design issue for: ${topic}`);
+  issueNumber = createIssue({
+    title: `PRD: ${topic}`,
+    label: DESIGN_LABEL,
+    body: `${AGENT_MARKER}\n\n${topic}\n\n_Filed via design.ts on behalf of the owner._`,
   });
-  try {
-    return (await rl.question(question)).trim();
-  } finally {
-    rl.close();
-  }
-};
-
-const sleep = (seconds: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, seconds * 1000));
-
-const gh = (args: string): string =>
-  execSync(`gh ${args}`, { encoding: "utf-8" });
-
-const prUrlOf = (convo: Conversation): string | undefined =>
-  [...convo.metadata.artifacts].reverse().find((a) => a.includes("/pull/"));
-
-// --- Pick or start a conversation --------------------------------------------
-
-const topicArg = process.argv.slice(2).join(" ").trim();
-let convo: Conversation;
-
-if (topicArg === "") {
-  const summaries = (await conversation.list()).filter(
-    (s) => s.role === "designer",
-  );
-  const open = summaries.filter(
-    (s) => s.status !== "done" || s.artifacts.some((a) => a.includes("/pull/")),
-  );
-  if (open.length > 0) {
-    console.log("Open design conversations:");
-    open.forEach((s, i) =>
-      console.log(`  ${i + 1}. ${s.id} [${s.status}] ${s.lastMessage ?? ""}`),
+  console.log(`Created design issue #${issueNumber}.`);
+} else {
+  const issues = listOpenIssues(DESIGN_LABEL);
+  if (issues.length === 0) {
+    const idea = await ask(
+      `No open ${DESIGN_LABEL} issues. Describe a new feature to design (or Enter to exit): `,
     );
-    const answer = await ask("Number to resume, or type a new feature idea: ");
+    if (idea === "") process.exit(0);
+    issueNumber = createIssue({
+      title: `PRD: ${idea}`,
+      label: DESIGN_LABEL,
+      body: `${AGENT_MARKER}\n\n${idea}\n\n_Filed via design.ts on behalf of the owner._`,
+    });
+    console.log(`Created design issue #${issueNumber}.`);
+  } else {
+    console.log(`Open ${DESIGN_LABEL} issues:`);
+    issues.forEach((i, idx) =>
+      console.log(`  ${idx + 1}. #${i.number} ${i.title}`),
+    );
+    const answer = await ask("Number to work on (or Enter to exit): ");
     const index = Number.parseInt(answer, 10);
-    if (Number.isInteger(index) && index >= 1 && index <= open.length) {
-      convo = await conversation.open(open[index - 1]!.id, { agent, sandbox });
-    } else if (answer !== "") {
-      convo = await startDesign(answer);
-    } else {
+    if (!Number.isInteger(index) || index < 1 || index > issues.length) {
       process.exit(0);
     }
-  } else {
-    const idea = await ask("What are we designing? ");
-    if (idea === "") process.exit(0);
-    convo = await startDesign(idea);
+    issueNumber = issues[index - 1]!.number;
   }
-} else {
-  convo = await startDesign(topicArg);
 }
 
-async function startDesign(topic: string): Promise<Conversation> {
-  const name = `design-${slugify(topic)}`;
-  const existing = (await conversation.list()).find((s) => s.id === name);
-  if (existing) {
-    console.log(`Re-attaching to existing conversation "${name}".`);
-    return conversation.open(name, { agent, sandbox });
-  }
-  console.log(`Starting design conversation "${name}"…`);
-  return conversation.start({
-    name,
+const issue = getIssue(issueNumber);
+
+const implNudge = laneNudge(
+  IMPLEMENT_LABEL,
+  "run `npm run sandcastle` when you want them built",
+);
+if (implNudge) console.log(`\nFYI: ${implNudge}`);
+
+// --- Open or start the conversation (issue number is the join key) ------------
+
+const convoId = `design-issue-${issueNumber}`;
+let convo: Conversation;
+const existing = (await conversation.list()).find((s) => s.id === convoId);
+if (existing) {
+  console.log(`Re-attaching to conversation "${convoId}".`);
+  convo = await conversation.open(convoId, { agent, sandbox });
+} else {
+  console.log(`Starting design conversation for issue #${issueNumber}…`);
+  convo = await conversation.start({
+    name: convoId,
     role: "designer",
     agent,
     sandbox,
     promptFile: ".sandcastle/designer-prompt.md",
-    promptArgs: { TOPIC: topic, AGENT_MARKER },
+    promptArgs: {
+      ISSUE_NUMBER: issueNumber,
+      ISSUE_TITLE: issue.title,
+      ISSUE_BODY: issue.body,
+      AGENT_MARKER,
+    },
   });
+}
+
+// Anchor comment: make the conversation visible from the issue (idempotent).
+if (!issue.comments.some((c) => c.body.includes(ANCHOR_TEXT))) {
+  commentOnIssue(
+    issueNumber,
+    `${AGENT_MARKER}\n\n${ANCHOR_TEXT} (\`${convoId}\`). Attach with \`npm run sandcastle:design\`.`,
+  );
 }
 
 // --- Recovery: a previous run may have died mid-turn --------------------------
 
-// chat() recovers on attach, but the phase-B path below never enters chat,
-// so an unanswered turn (e.g. Ctrl-C during a feedback send) must be
-// re-run here before anything calls send().
 if (convo.status === "awaiting-agent" || convo.status === "failed") {
   console.log("Recovering an unanswered turn from a previous run…");
   const turn = await convo.recover();
@@ -122,20 +138,41 @@ if (convo.status === "awaiting-agent" || convo.status === "failed") {
 
 // --- Phase A: grilling chat ---------------------------------------------------
 
+const prUrlOf = (c: Conversation): string | undefined =>
+  [...c.metadata.artifacts].reverse().find((a) => a.includes("/pull/"));
+const prdFileOf = (c: Conversation): string | undefined =>
+  c.metadata.artifacts.find((a) => /(^|\/)prd\//.test(a) && a.endsWith(".md"));
+
 let prUrl = prUrlOf(convo);
 if (prUrl === undefined) {
   await chat(convo);
   prUrl = prUrlOf(convo);
   if (prUrl === undefined) {
-    console.log("No PR was opened — re-run to continue the conversation.");
+    // The conversation may have ended by de-escalation (issue relabeled to
+    // Sandcastle, no PRD) — or just detached mid-grilling.
+    const labels = getIssue(issueNumber).labels.map((l) => l.name);
+    if (convo.status === "done" && labels.includes(IMPLEMENT_LABEL)) {
+      console.log(
+        `\nIssue #${issueNumber} was de-escalated to ${IMPLEMENT_LABEL} — no PRD needed.` +
+          `\nNext step:\n  npm run sandcastle`,
+      );
+    } else {
+      console.log(
+        "\nNo PR was opened — re-run `npm run sandcastle:design` to continue the conversation.",
+      );
+    }
     process.exit(0);
   }
 }
 
+// Make the PR visible from the issue (idempotent).
+if (!getIssue(issueNumber).comments.some((c) => c.body.includes(prUrl))) {
+  commentOnIssue(issueNumber, `${AGENT_MARKER}\n\nPRD PR opened: ${prUrl}`);
+}
+
 // --- Phase B: PR review — same conversation, PR comments as the transport ----
 
-const prdFileOf = (c: Conversation): string | undefined =>
-  c.metadata.artifacts.find((a) => /(^|\/)prd\//.test(a) && a.endsWith(".md"));
+const nextStep = () => `npm run sandcastle:decompose`;
 
 console.log(`\nThe PRD is up for review: ${prUrl}\n`);
 console.log("Your move — either:");
@@ -147,7 +184,7 @@ console.log(
 );
 console.log(`      gh pr edit ${prUrl} --add-label "sandcastle:approved"`);
 console.log(
-  `\nAfter the merge, the next step is:\n      npx tsx .sandcastle/decompose.ts ${prdFileOf(convo) ?? "prd/<file>.md"}`,
+  `\nAfter the merge I'll file the decompose issue; the next step is:\n      ${nextStep()}`,
 );
 console.log(
   `\nWatching ${prUrl} for feedback and approval (Ctrl-C to detach; re-run to resume)…`,
@@ -161,6 +198,7 @@ process.on("SIGINT", () => {
     .catch(() => {})
     .then(() => process.exit(0));
 });
+
 const feedbackStatePath = join(
   ".sandcastle",
   "conversations",
@@ -182,29 +220,48 @@ interface PrComment {
   body?: string;
   createdAt?: string;
   submittedAt?: string;
-  state?: string;
 }
 
-const nextStep = () =>
-  `npx tsx .sandcastle/decompose.ts ${prdFileOf(convo) ?? "prd/<file>.md"}`;
+/** Handoff: the merge that lands the PRD creates the decompose issue. */
+const createHandoffIssue = (): void => {
+  const prdFile = prdFileOf(convo);
+  if (!prdFile) {
+    console.log(
+      `Merged, but no PRD file recorded in artifacts — file the decompose issue manually with a **PRD:** line and the ${DECOMPOSE_LABEL} label.`,
+    );
+    return;
+  }
+  ensureLabel(DECOMPOSE_LABEL, "Merged PRD needs an issue breakdown");
+  const title = decomposeIssueTitle(prdFile);
+  const already = findIssueByTitle(title);
+  if (already !== undefined) {
+    console.log(`Decompose issue already exists: #${already}.`);
+  } else {
+    const n = createIssue({
+      title,
+      label: DECOMPOSE_LABEL,
+      body: `${AGENT_MARKER}\n\n**PRD:** ${prdFile}\n\nFollows #${issueNumber}.`,
+    });
+    console.log(`Filed decompose issue #${n}.`);
+  }
+  console.log(`Next step:\n  ${nextStep()}`);
+};
 
 for (;;) {
-  const view = JSON.parse(
-    gh(`pr view ${prUrl} --json state,reviewDecision,comments,reviews,labels`),
-  ) as {
+  const view = ghJson<{
     state: string;
     reviewDecision: string;
     comments: PrComment[];
     reviews: PrComment[];
     labels: Array<{ name?: string }>;
-  };
+  }>(`pr view ${prUrl} --json state,reviewDecision,comments,reviews,labels`);
   if (view.state !== "OPEN") {
     // Manual merge/close still honored as a fallback.
-    console.log(
-      view.state === "MERGED"
-        ? `PR merged — next step:\n  ${nextStep()}`
-        : `PR is ${view.state.toLowerCase()}.`,
-    );
+    if (view.state === "MERGED") {
+      createHandoffIssue();
+    } else {
+      console.log(`PR is ${view.state.toLowerCase()}.`);
+    }
     break;
   }
 
@@ -218,7 +275,8 @@ for (;;) {
     console.log("\nsandcastle:approved — merging the PRD PR…");
     try {
       gh(`pr merge ${prUrl} --squash --delete-branch`);
-      console.log(`Merged. Next step:\n  ${nextStep()}`);
+      console.log("Merged.");
+      createHandoffIssue();
       break;
     } catch (error) {
       console.error(

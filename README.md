@@ -735,7 +735,7 @@ Mechanics and constraints:
 - Concurrent `send()` on the same conversation fails fast (worktree lock).
 - `promptArgs` substitution is applied host-side to the opening prompt; shell (`` !`cmd` ``) expansion is not.
 
-The `conversational-prd` template is the reference workflow: `design.ts` grills you into a PRD over a conversation and opens a PR (then keeps addressing your PR comments through the same conversation until approval), and `decompose.ts` turns the merged PRD into Sandcastle-labeled issues after you approve the breakdown.
+The `conversational-prd` template is the reference workflow, issue-anchored end to end: every stage starts from a GitHub issue carrying a routing label, and every stage's exit tells you the next step. `issue.ts` (filer) turns a short report into a well-formed issue routed to the right lane (`Sandcastle` for implementer-ready work, `sandcastle:design` when it needs a PRD, or held unlabeled); `design.ts` picks up `sandcastle:design` issues (or files one from a topic argument), grills you into a PRD PR that closes the design issue, addresses your PR comments through the same conversation, merges on the `sandcastle:approved` label, and files the `sandcastle:decompose` handoff issue; `decompose.ts` picks that up and turns the merged PRD into Sandcastle-labeled implementation issues after you approve the breakdown. The main loop's planner then takes over — and nudges you when design/decompose issues are waiting on a conversation.
 
 ### Early termination with `<promise>COMPLETE</promise>`
 

@@ -27,15 +27,18 @@ describe("conversational-prd template", () => {
     expect(template!.description).toContain("decompose.ts");
   });
 
-  it("scaffolds the designer/decomposer scripts and role prompts", async () => {
+  it("scaffolds the designer/decomposer/filer scripts, role prompts, and shared helpers", async () => {
     const dir = await makeDir();
     await runScaffold(dir);
     const files = await readdir(join(dir, ".sandcastle"));
     for (const expected of [
       "design.ts",
       "decompose.ts",
+      "issue.ts",
+      "shared.ts",
       "designer-prompt.md",
       "decomposer-prompt.md",
+      "filer-prompt.md",
     ]) {
       expect(files).toContain(expected);
     }
@@ -52,17 +55,24 @@ describe("conversational-prd template", () => {
       join(dir, ".sandcastle", "decompose.ts"),
       "utf-8",
     );
-    for (const script of [design, decompose]) {
+    const issue = await readFile(join(dir, ".sandcastle", "issue.ts"), "utf-8");
+    for (const script of [design, decompose, issue]) {
       expect(script).toContain('from "@ai-hero/sandcastle"');
       expect(script).toContain('from "@ai-hero/sandcastle/chat"');
       expect(script).toContain("conversation.");
       expect(script).toContain("chat(");
+      expect(script).toContain('from "./shared.ts"');
     }
     // design.ts drives phase B (PR feedback) from the host, with the same
-    // label-gated approval + script-side merge as the main loop.
+    // label-gated approval + script-side merge as the main loop, and files
+    // the decompose handoff issue at merge.
     expect(design).toContain("PR feedback");
     expect(design).toContain("sandcastle:approved");
     expect(design).toContain("pr merge");
+    expect(design).toContain("decomposeIssueTitle");
+    // decompose.ts closes its tracking issue; issue.ts routes by label.
+    expect(decompose).toContain("issue close");
+    expect(issue).toContain("DESIGN_LABEL");
   });
 
   it("role prompts contain methodology, not protocol mechanics", async () => {
@@ -76,17 +86,27 @@ describe("conversational-prd template", () => {
       join(dir, ".sandcastle", "decomposer-prompt.md"),
       "utf-8",
     );
-    expect(designer).toContain("{{TOPIC}}");
+    const filer = await readFile(
+      join(dir, ".sandcastle", "filer-prompt.md"),
+      "utf-8",
+    );
+    expect(designer).toContain("{{ISSUE_NUMBER}}");
+    expect(designer).toContain("Closes #{{ISSUE_NUMBER}}");
     expect(designer).toContain("prd/NNN");
+    // De-escalation: a design issue that's really just a bug gets relabeled.
+    expect(designer).toContain("de-escalat");
     expect(decomposer).toContain("{{PRD_FILE}}");
+    expect(decomposer).toContain("{{ISSUE_NUMBER}}");
     expect(decomposer).toContain("sub_issues");
+    expect(filer).toContain("{{REPORT}}");
+    expect(filer).toContain("sandcastle:design");
     // Everything agents write on GitHub is attributed via the
     // [agent · harness · model] marker the scripts pass in.
-    expect(designer).toContain("{{AGENT_MARKER}}");
-    expect(decomposer).toContain("{{AGENT_MARKER}}");
-    // The <turn> envelope wire format is library-owned (appended by
-    // conversation.start), so prompts must not redefine it.
-    expect(designer).not.toContain("<turn>");
-    expect(decomposer).not.toContain("<turn>");
+    for (const prompt of [designer, decomposer, filer]) {
+      expect(prompt).toContain("{{AGENT_MARKER}}");
+      // The <turn> envelope wire format is library-owned (appended by
+      // conversation.start), so prompts must not redefine it.
+      expect(prompt).not.toContain("<turn>");
+    }
   });
 });

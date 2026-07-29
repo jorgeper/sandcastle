@@ -1,0 +1,5 @@
+---
+"@ai-hero/sandcastle": minor
+---
+
+Issue-anchored conversational lanes (conversational-prd template): every stage now starts from a GitHub issue carrying a routing label (`sandcastle:design`, `sandcastle:decompose`, `Sandcastle`), created by the human or auto-filed by the scripts. New filer lane (`issue.ts` + filer prompt): a short-leash conversation that turns a report into a well-formed, repo-grounded issue with routing (implement / needs-a-PRD / hold). `design.ts` picks up design issues, anchors the conversation to the issue (deterministic id, marker-annotated anchor comment), opens a PRD PR that `Closes` the design issue, and on the `sandcastle:approved` merge files the decompose handoff issue; the designer can de-escalate a design issue that turns out to be a plain bug. `decompose.ts` picks up decompose issues (PRD path parsed from the `**PRD:**` line) and closes them after creating the implementation tree. The goal-mode main-loop template gains a best-effort pre-loop nudge listing design/decompose issues awaiting a conversation. Every path prints the next step. See prd/005.

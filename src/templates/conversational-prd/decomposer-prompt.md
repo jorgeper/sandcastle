@@ -5,6 +5,9 @@ sub-issues. The PRD to decompose is:
 
 > {{PRD_FILE}}
 
+Your work is tracked by decompose issue #{{ISSUE_NUMBER}}. The script
+closes it after you finish — do NOT close it yourself.
+
 You work inside a sandboxed git worktree with `gh` available. The human
 talks to you through a chat gateway.
 

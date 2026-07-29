@@ -1,4 +1,4 @@
 {
   "name": "conversational-prd",
-  "description": "Designer and decomposer agents you talk to through a chat CLI: design.ts grills you into a PRD and opens a PR, decompose.ts turns the merged PRD into Sandcastle-labeled issues"
+  "description": "Issue-anchored conversational agents you talk to through a chat CLI: issue.ts files well-routed issues, design.ts grills you into a PRD PR from sandcastle:design issues, decompose.ts turns merged PRDs into Sandcastle-labeled issues"
 }
