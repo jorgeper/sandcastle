@@ -127,6 +127,14 @@ describe("composeConversationProtocol", () => {
     expect(CONVERSATION_PROTOCOL_INSTRUCTIONS).toContain(APPROVED_MESSAGE);
     expect(CONVERSATION_PROTOCOL_INSTRUCTIONS).toContain('"type": "ask"');
   });
+
+  it("instructions forbid restating options inside the message body", () => {
+    // The frontend renders options as the selection UI; duplicated
+    // enumerations in the prose defeat it (see screenshot bug).
+    expect(CONVERSATION_PROTOCOL_INSTRUCTIONS).toContain(
+      "NEVER enumerate, number, or restate",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

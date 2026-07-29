@@ -155,6 +155,12 @@ The three envelope types:
    - Prefer offering 2-4 "options" when the answer space is enumerable; omit
      "options" for open-ended questions. The human can always answer with
      free text regardless of options.
+   - The options render as a selectable menu directly below the message —
+     NEVER enumerate, number, or restate the choices inside "message"; it
+     holds only the question and any context needed to decide. Make each
+     option string self-contained enough to choose from, with a concrete
+     example when it helps ("total significant digits: --pi 5 -> 3.1415").
+     Put your recommended option first, suffixed "(recommended)".
 
 2. A proposal — when you have a draft (document, plan, breakdown) for review:
    {"type": "propose", "message": "<the full draft, markdown>"}
@@ -187,4 +193,4 @@ export const composeConversationProtocol = (rolePrompt: string): string =>
  * reminder measurably improves envelope compliance deep into a session. The
  * conversation store records the human message without it.
  */
-export const TURN_ENVELOPE_REMINDER = `\n\n(End your reply with exactly one <${TURN_TAG}> envelope, per the conversation protocol.)`;
+export const TURN_ENVELOPE_REMINDER = `\n\n(End your reply with exactly one <${TURN_TAG}> envelope, per the conversation protocol. If asking with options, never restate the choices in "message" — they render as a menu.)`;
