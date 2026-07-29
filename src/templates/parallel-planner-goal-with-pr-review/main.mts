@@ -759,20 +759,39 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     }
   }
 
-  // Only pass branches that actually produced commits to the merge phase.
-  const completedIssues = settled
-    .map((outcome, i) => ({ outcome, issue: issues[i]! }))
-    .filter(
-      (entry) =>
-        entry.outcome.status === "fulfilled" &&
-        entry.outcome.value.commits.length > 0,
-    )
-    .map((entry) => entry.issue);
+  // Merge-phase input is derived from GIT STATE, not just this cycle's
+  // results: a previous run may have implemented a branch and died before
+  // merging (re-entrancy) — the goal judge then verifies "already done" with
+  // zero new commits, and commit-count-only filtering would strand the
+  // branch (and re-classify the issue as `implement` forever). Legacy
+  // branches ahead of the target merge even with no new commits this cycle;
+  // PR-mode branches never merge locally (their gate is owner approval).
+  const branchAhead = async (branch: string): Promise<boolean> => {
+    try {
+      const { stdout } = await execFileAsync("git", [
+        "rev-list",
+        "--count",
+        `${TARGET_BRANCH}..${branch}`,
+      ]);
+      return Number.parseInt(stdout.trim(), 10) > 0;
+    } catch {
+      return false; // branch doesn't exist locally
+    }
+  };
+  const completedIssues: typeof issues = [];
+  for (const [i, outcome] of settled.entries()) {
+    const issue = issues[i]!;
+    if (outcome.status !== "fulfilled") continue;
+    if (prLabelByNumber.get(Number(issue.id))) continue;
+    if (outcome.value.commits.length > 0 || (await branchAhead(issue.branch))) {
+      completedIssues.push(issue);
+    }
+  }
 
   const completedBranches = completedIssues.map((i) => i.branch);
 
   console.log(
-    `\nExecution complete. ${completedBranches.length} branch(es) with commits:`,
+    `\nExecution complete. ${completedBranches.length} branch(es) ready to merge:`,
   );
   for (const branch of completedBranches) {
     console.log(`  ${branch}`);
