@@ -134,7 +134,24 @@ if (prUrl === undefined) {
 
 // --- Phase B: PR review — same conversation, PR comments as the transport ----
 
-console.log(`\nWatching ${prUrl} for feedback (Ctrl-C to detach)…`);
+const prdFileOf = (c: Conversation): string | undefined =>
+  c.metadata.artifacts.find((a) => /(^|\/)prd\//.test(a) && a.endsWith(".md"));
+
+console.log(`\nThe PRD is up for review: ${prUrl}\n`);
+console.log("Your move — either:");
+console.log(
+  "  • Comment on the PR: I'll pick it up here and the designer will push revisions and reply.",
+);
+console.log(
+  `  • Approve it by merging (you authored the PR via the agent, so merging IS approval):`,
+);
+console.log(`      gh pr merge ${prUrl} --squash --delete-branch`);
+console.log(
+  `\nAfter merging, the next step is:\n      npx tsx .sandcastle/decompose.ts ${prdFileOf(convo) ?? "prd/<file>.md"}`,
+);
+console.log(
+  `\nWatching ${prUrl} for feedback (Ctrl-C to detach; re-run to resume)…`,
+);
 
 // The keep-alive sandbox stays up between polls; tear it down on Ctrl-C so
 // detaching doesn't leak a running container (worktree/store/session persist).
@@ -180,7 +197,7 @@ for (;;) {
   if (view.state !== "OPEN" || view.reviewDecision === "APPROVED") {
     console.log(
       view.state === "MERGED"
-        ? "PR merged — next step: npx tsx .sandcastle/decompose.ts prd/<file>.md"
+        ? `PR merged — next step:\n  npx tsx .sandcastle/decompose.ts ${prdFileOf(convo) ?? "prd/<file>.md"}`
         : `PR is ${view.reviewDecision === "APPROVED" ? "approved" : view.state.toLowerCase()}.`,
     );
     break;
@@ -209,6 +226,9 @@ for (;;) {
       JSON.stringify({ lastProcessedAt: items[items.length - 1]!.at }) + "\n",
     );
     console.log(`Designer: ${turn.message.split("\n", 1)[0]}`);
+    console.log(
+      "(reply on the PR again, or merge it when you're satisfied — still watching)",
+    );
   } else {
     process.stdout.write(".");
   }

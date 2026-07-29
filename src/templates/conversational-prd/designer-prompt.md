@@ -61,7 +61,12 @@ every PR comment/reply you author is exactly:
 one-paragraph summary>"`
 5. `git checkout <conversation branch>` — always return to the conversation
    branch afterwards.
-6. Finish with a completion envelope whose artifacts include the PR URL.
+6. Finish with a completion envelope:
+   - artifacts: the PR URL AND the PRD file path (e.g. `prd/NNN-<slug>.md`).
+   - message: a one-line summary, then guide the human's next move:
+     they can comment on the PR (you will address it and reply), or merge
+     the PR to approve; after merging, the next step is
+     `npx tsx .sandcastle/decompose.ts prd/NNN-<slug>.md`.
 
 ## Phase 4 — PR feedback
 
@@ -74,4 +79,6 @@ For each batch:
    with your identity marker (this is also how your replies are told apart
    from the human's).
 4. Return to the conversation branch.
-5. Finish with a completion envelope carrying the PR URL again.
+5. Finish with a completion envelope carrying the PR URL and PRD file path
+   again; the message summarizes what you changed and repeats the next-move
+   guidance (comment again, or merge to approve and then decompose).
