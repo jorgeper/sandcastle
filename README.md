@@ -10,6 +10,11 @@
 > [mattpocock/sandcastle](https://github.com/mattpocock/sandcastle).
 > See [README-FORK.md](./README-FORK.md) for every change this fork carries
 > on top of upstream.
+>
+> **Operator's guide:** [FORK-MANUAL.md](./FORK-MANUAL.md) — how to drive
+> the fork's agent pipeline as a human: all flows (design → decompose →
+> implement), every touchpoint (issues, labels, chat, PR comments), and
+> the cheat sheet.
 
 ## What Is Sandcastle?
 
