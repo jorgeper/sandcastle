@@ -41,6 +41,108 @@ enforced by the orchestrator even if the pr-writer forgets). Expand the
 design issue in GitHub's issue list and the entire feature unfolds under
 it. Nothing exists without an issue that says why.
 
+## Onboarding a repo
+
+How to put an existing repo on the full four-lane pipeline. Written from a
+real onboarding (marky-mark) — every numbered caveat below was a bug or a
+forgotten step the first time through. If a step surprises you, fix this
+manual, not just the repo.
+
+**Prerequisites:** Docker running, `gh` authed, Node with npm, and a local
+build of this fork (`npm run build` in `~/src/sandcastle`) — the fork
+isn't on npm.
+
+**0. Decide where the agents play.** The pipeline lives in issues, labels,
+and PRs — the repo the agents see is the repo they write to. To trial
+without risk, onboard a **pushed clone** with `origin` re-pointed and
+deliberately **no `upstream` remote** (GitHub won't fork your own repo
+into your own account, and a fork's shared PR surface is wrong anyway):
+
+```bash
+gh repo create <owner>/<repo>-sandcastle --private
+git clone https://github.com/<owner>/<repo>.git ~/src/throwaway/<repo>-sandcastle
+cd ~/src/throwaway/<repo>-sandcastle
+git remote set-url origin https://github.com/<owner>/<repo>-sandcastle.git
+git push -u origin main
+gh repo set-default <owner>/<repo>-sandcastle
+```
+
+**1. Install the fork.** `npm install --save-dev file:../../sandcastle tsx`
+(adjust the relative path). npm symlinks `file:` deps — a later
+`npm run build` in the fork propagates **library** changes with no
+reinstall, but **template files do not update through the symlink**: after
+editing templates in the fork, re-copy the changed files into
+`.sandcastle/` by hand.
+
+**2. `npx sandcastle init`.** Answers: agent `claude-code`, sandbox
+`docker`, template **`parallel-planner-goal-with-pr-review`** (its
+`main` file is the implement loop and nudges the conversational lanes),
+tracker `github-issues`, create the label, install `zod`. ⚠ The main file
+is `main.ts` when the repo's package.json has `"type": "module"`, else
+`main.mts` — check `ls .sandcastle` before writing scripts that reference
+it.
+
+**3. Layer the conversational lanes** (no combined template yet):
+
+```bash
+cp ~/src/sandcastle/src/templates/conversational-prd/{design.ts,decompose.ts,issue.ts,shared.ts,shared.test.ts,designer-prompt.md,decomposer-prompt.md,filer-prompt.md} .sandcastle/
+```
+
+**4. Credentials.** `cp .sandcastle/.env.example .sandcastle/.env`; fill
+`CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`) and `GH_TOKEN`. ⚠ A
+fine-grained PAT needs **Contents + Issues + Pull requests, all R/W**,
+scoped to the onboarded repo — a contents-only token authenticates fine
+and then strands agents on issue operations (the preflight and doctor now
+catch this).
+
+**5. Scripts.** Add to package.json (init suggests these but does not
+write them), using the main filename from step 2:
+
+```json
+"sandcastle":           "npx tsx .sandcastle/main.mts",
+"sandcastle:init":      "npx tsx .sandcastle/main.mts --init",
+"sandcastle:doctor":    "npx tsx .sandcastle/main.mts --doctor",
+"sandcastle:design":    "npx tsx .sandcastle/design.ts",
+"sandcastle:decompose": "npx tsx .sandcastle/decompose.ts",
+"sandcastle:issue":     "npx tsx .sandcastle/issue.ts"
+```
+
+**6. Labels — and COMMIT THE SCAFFOLD.** `npm run sandcastle:init`
+creates the label vocabulary and writes
+`.claude/skills/sandcastle-implementer/SKILL.md`. Then:
+
+```bash
+git add .claude .sandcastle package.json package-lock.json
+git commit -m "chore: sandcastle scaffold + implementer skill"
+git push origin main
+```
+
+⚠ This is the most-forgotten step and it fails silently: sandbox worktrees
+branch from your committed `main`, so an uncommitted skill file means the
+goal-mode implementer runs with **no process rules** — unmarked comments,
+no single-comment discipline, no prior-attempt awareness. The scaffolded
+`.sandcastle/.gitignore` already excludes `.env`, logs, and worktrees, so
+committing the directory is safe.
+
+**7. Dockerfile = toolchain.** Before (or after — rebuild any time with
+`npx sandcastle docker build-image`) the image build, bake in what agents
+would otherwise reinstall per sandbox: browsers, system packages. E.g.
+`RUN npx playwright install --with-deps chromium`. Rule: **image =
+toolchain, worktree = project deps (`node_modules` survives the bind
+mount), hooks = cheap glue only.** If you watch an agent `apt-get` or
+download browsers, that belongs in the image.
+
+**8. Verify, then smoke test.**
+
+```bash
+npm run sandcastle:doctor    # env, token issue-access probe, image, labels
+npm run sandcastle:issue -- "a small real improvement"
+```
+
+The filer lane is the gentlest first run: capture is instant, `y` opens
+the chat, route to `Sandcastle`, then `npm run sandcastle` to watch the
+implement lane land it. From here the lanes below are the map.
+
 ## Lane 0 — File (capture first, enrich optionally)
 
 The lane for everything smaller than a PRD — and the router for everything
