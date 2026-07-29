@@ -1,10 +1,49 @@
 import { describe, expect, it } from "vitest";
 import {
   detectInstalls,
+  dockerfileSuggestion,
   updateTally,
   formatNudges,
   type InstallTally,
 } from "./install-scan.mts";
+
+describe("dockerfileSuggestion", () => {
+  it("suggests playwright with-deps, carrying the browsers from the command", () => {
+    const d = {
+      key: "playwright-browsers",
+      label: "Playwright browsers",
+      line: "Bash(npx playwright install chromium 2>&1 | tail -10)",
+    };
+    expect(dockerfileSuggestion(d)).toBe(
+      "RUN npx playwright install --with-deps chromium",
+    );
+  });
+
+  it("parses package names out of an apt line, dropping flags and shell noise", () => {
+    const d = {
+      key: "apt-packages",
+      label: "apt",
+      line: "Bash(whoami; id; apt-get install -y libnss3 2>&1 | tail -3)",
+    };
+    expect(dockerfileSuggestion(d)).toBe(
+      "RUN apt-get update && apt-get install -y libnss3",
+    );
+  });
+
+  it("handles npm globals", () => {
+    const d = {
+      key: "npm-global",
+      label: "npm -g",
+      line: "npm install -g tsx vitest && echo done",
+    };
+    expect(dockerfileSuggestion(d)).toBe("RUN npm install -g tsx vitest");
+  });
+
+  it("falls back to a placeholder when packages can't be parsed", () => {
+    const d = { key: "apk-packages", label: "apk", line: "apk add $(cat x)" };
+    expect(dockerfileSuggestion(d)).toBe("RUN apk add --no-cache <packages>");
+  });
+});
 
 describe("detectInstalls", () => {
   it("detects playwright browser installs", () => {
@@ -86,6 +125,8 @@ describe("formatNudges", () => {
     expect(nudge).toContain("seen in 3 runs");
     expect(nudge).toContain(".sandcastle/Dockerfile");
     expect(nudge).toContain("npx sandcastle docker build-image");
+    // The nudge carries the ready-to-paste Dockerfile line.
+    expect(nudge).toContain("RUN npx playwright install --with-deps");
   });
 
   it("omits the repeat clause on first sighting", () => {

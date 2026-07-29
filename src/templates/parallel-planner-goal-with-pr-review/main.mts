@@ -71,7 +71,9 @@ if (cliArgs.includes("--init")) {
   process.exit(0);
 }
 if (cliArgs.includes("--doctor")) {
-  process.exit(await runDoctor());
+  process.exit(
+    await runDoctor({ imageGaps: cliArgs.includes("--image-gaps") }),
+  );
 }
 
 // The planner emits its plan as JSON inside <plan> tags; Output.object extracts

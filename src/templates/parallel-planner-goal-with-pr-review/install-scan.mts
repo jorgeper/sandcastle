@@ -95,6 +95,44 @@ export const updateTally = (
   return { imageId, entries };
 };
 
+/** Package tokens following the install keyword in the captured line —
+ *  flags are skipped, the first shell metacharacter ends the list. */
+const packagesAfter = (line: string, keyword: RegExp): string[] => {
+  const match = keyword.exec(line);
+  if (!match) return [];
+  const rest = line.slice(match.index + match[0].length);
+  const packages: string[] = [];
+  for (const token of rest.split(/\s+/)) {
+    if (token === "" || token.startsWith("-")) continue;
+    if (!/^[A-Za-z0-9][\w.+:@/-]*$/.test(token)) break;
+    packages.push(token);
+  }
+  return packages;
+};
+
+/** Ready-to-paste Dockerfile line for a detection, package names parsed
+ *  from the captured command when possible. */
+export const dockerfileSuggestion = (d: InstallDetection): string => {
+  const pkgs = (keyword: RegExp, fallback = "<packages>"): string => {
+    const found = packagesAfter(d.line, keyword);
+    return found.length > 0 ? found.join(" ") : fallback;
+  };
+  switch (d.key) {
+    case "playwright-browsers":
+      return `RUN npx playwright install --with-deps ${pkgs(/playwright\s+install\b/, "chromium")}`;
+    case "apt-packages":
+      return `RUN apt-get update && apt-get install -y ${pkgs(/apt(?:-get)?\s+install\b/)}`;
+    case "apk-packages":
+      return `RUN apk add --no-cache ${pkgs(/apk\s+add\b/)}`;
+    case "dnf-yum-packages":
+      return `RUN dnf install -y ${pkgs(/(?:dnf|yum)\s+install\b/)}`;
+    case "npm-global":
+      return `RUN npm install -g ${pkgs(/npm\s+(?:install|i)\s+(?:-g|--global)\b/)}`;
+    default:
+      return `RUN <install ${d.label}>`;
+  }
+};
+
 export const formatNudges = (
   tally: InstallTally,
   detections: InstallDetection[],
@@ -104,7 +142,8 @@ export const formatNudges = (
     const repeat = runs > 1 ? ` (seen in ${runs} runs)` : "";
     return (
       `⚠ agents installed ${d.label} inside the sandbox${repeat} — ` +
-      `bake it into .sandcastle/Dockerfile and rebuild: npx sandcastle docker build-image`
+      `bake it into .sandcastle/Dockerfile and rebuild: npx sandcastle docker build-image\n` +
+      `    ${dockerfileSuggestion(d)}`
     );
   });
 

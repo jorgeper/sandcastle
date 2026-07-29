@@ -8,7 +8,12 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { parseEnvFile } from "./env.mts";
 import * as github from "./github.mts";
-import { readTally, scanLogs } from "./install-scan.mts";
+import {
+  dockerfileSuggestion,
+  readTally,
+  scanLogs,
+  type InstallDetection,
+} from "./install-scan.mts";
 
 const execFileAsync = promisify(execFile);
 
@@ -30,7 +35,8 @@ export const printHelp = (): void => {
       `  npm run sandcastle           run the loop (classify → merge → debate → plan → implement)`,
       `  npm run sandcastle:init      create the sandcastle label vocabulary in this repo`,
       `  npm run sandcastle:doctor    check env, auth, docker image, and labels`,
-      `  npx tsx .sandcastle/main.mts [--init | --doctor | --help]`,
+      `      -- --image-gaps          also live-scan logs for in-sandbox installs + Dockerfile suggestions`,
+      `  npx tsx .sandcastle/main.mts [--init | --doctor [--image-gaps] | --help]`,
       ``,
       `Labels (see .sandcastle/PR_SETUP.md for the full protocol):`,
       ...LABEL_ROWS.map(
@@ -88,7 +94,12 @@ interface CheckResult {
   hint?: string;
 }
 
-export const runDoctor = async (): Promise<number> => {
+export const runDoctor = async (options?: {
+  /** Also live-scan ALL logs for in-sandbox installs and print ready-to-
+   *  paste Dockerfile lines. Off by default: old logs from before an image
+   *  fix would re-flag solved problems. */
+  imageGaps?: boolean;
+}): Promise<number> => {
   console.log(`Sandcastle doctor\n`);
   const results: boolean[] = [];
 
@@ -220,25 +231,40 @@ export const runDoctor = async (): Promise<number> => {
 
   await check("image gaps", async () => {
     // In-sandbox installs mean the Dockerfile is missing toolchain the
-    // agents keep needing (prd/006). Two sources, merged: the cross-run
-    // tally the loop writes at run end, and a LIVE scan of all logs — so
-    // an interrupted or still-running loop can't hide the evidence.
-    // Rebuilding the image resets the tally.
+    // agents keep needing (prd/006). The cross-run tally is always
+    // consulted; --image-gaps additionally live-scans ALL logs (so an
+    // interrupted or still-running loop can't hide the evidence) and
+    // prints ready-to-paste Dockerfile lines. Rebuilding resets the tally.
     const tally = readTally();
     const found = new Map<string, string>();
+    const detections = new Map<string, InstallDetection>();
     for (const [key, e] of Object.entries(tally?.entries ?? {})) {
       found.set(key, `${key} (${e.runs} run${e.runs !== 1 ? "s" : ""})`);
+      detections.set(key, { key, label: key, line: e.lastExample });
     }
-    for (const d of scanLogs(0)) {
-      if (!found.has(d.key)) found.set(d.key, `${d.key} (in logs, not yet tallied)`);
+    if (options?.imageGaps) {
+      for (const d of scanLogs(0)) {
+        if (!found.has(d.key)) {
+          found.set(d.key, `${d.key} (in logs, not yet tallied)`);
+        }
+        detections.set(d.key, d);
+      }
     }
     if (found.size === 0) {
-      return { ok: true, detail: "no in-sandbox installs found in tally or logs" };
+      return {
+        ok: true,
+        detail: options?.imageGaps
+          ? "no in-sandbox installs found in tally or logs"
+          : "none tallied (re-run with --image-gaps for a full log scan)",
+      };
     }
+    const suggestions = [...detections.values()]
+      .map((d) => `      ${dockerfileSuggestion(d)}`)
+      .join("\n");
     return {
       ok: false,
       detail: `agents install inside sandboxes: ${[...found.values()].join(", ")}`,
-      hint: "bake these into .sandcastle/Dockerfile, then `npx sandcastle docker build-image` (rebuilding resets the tally)",
+      hint: `add to .sandcastle/Dockerfile, then \`npx sandcastle docker build-image\` (rebuilding resets the tally):\n${suggestions}`,
     };
   });
 
