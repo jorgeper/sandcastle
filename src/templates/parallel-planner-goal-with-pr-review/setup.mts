@@ -166,6 +166,27 @@ export const runDoctor = async (): Promise<number> => {
     return { ok: true, detail: slug };
   });
 
+  await check("implementer skill committed", async () => {
+    // Sandbox worktrees branch from committed history, so an uncommitted
+    // skill file silently strips goal-mode implementers of their process
+    // rules (single 🏰 comment when complete, prior-attempt awareness).
+    try {
+      await execFileAsync("git", ["cat-file", "-e", `HEAD:${SKILL_PATH}`]);
+    } catch {
+      const scaffolded = existsSync(SKILL_PATH);
+      return {
+        ok: false,
+        detail: scaffolded
+          ? `${SKILL_PATH} exists but is not committed — implementers run without process rules`
+          : `${SKILL_PATH} missing`,
+        hint: scaffolded
+          ? "git add .claude .sandcastle && git commit -m 'chore: sandcastle scaffold' && git push"
+          : "run `npm run sandcastle:init`, then git add .claude .sandcastle && git commit && git push",
+      };
+    }
+    return { ok: true, detail: "committed on HEAD" };
+  });
+
   await check("docker sandbox image", async () => {
     const image = `sandcastle:${basename(process.cwd())}`;
     const { stdout } = await execFileAsync("docker", ["images", "-q", image]);
