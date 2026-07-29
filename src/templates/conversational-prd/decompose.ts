@@ -19,6 +19,7 @@ import {
   findIssueByTitle,
   decomposeIssueTitle,
   parsePrdLine,
+  pullFastForward,
   gh,
   laneNudge,
 } from "./shared.ts";
@@ -98,8 +99,14 @@ if (!prdFile) {
   process.exit(1);
 }
 if (!existsSync(prdFile)) {
+  // The PRD merge landed on the remote; the local checkout may be behind.
+  console.log(`${prdFile} not found locally — pulling…`);
+  pullFastForward();
+}
+if (!existsSync(prdFile)) {
   console.error(
-    `PRD file ${prdFile} (from issue #${issueNumber}) not found — is your checkout up to date? (git pull)`,
+    `PRD file ${prdFile} (from issue #${issueNumber}) not found even after ` +
+      "a fast-forward pull — check the branch you're on and the issue's **PRD:** line.",
   );
   process.exit(1);
 }

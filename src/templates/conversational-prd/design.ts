@@ -24,6 +24,7 @@ import {
   findIssueByTitle,
   decomposeIssueTitle,
   numberFromUrl,
+  pullFastForward,
   laneNudge,
 } from "./shared.ts";
 
@@ -154,6 +155,7 @@ const sweepPr = async (conversationId: string): Promise<void> => {
     try {
       gh(`pr merge ${prUrl} --squash --delete-branch`);
       console.log("  merged.");
+      if (pullFastForward()) console.log("  local checkout fast-forwarded.");
       createHandoffIssue(prdFileOf(convo), designIssue);
     } catch (error) {
       console.error(

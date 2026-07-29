@@ -51,6 +51,18 @@ export const numberFromUrl = (url: string): number | undefined => {
 export const gh = (args: string): string =>
   execSync(`gh ${args}`, { encoding: "utf-8" });
 
+/** Fast-forward the local checkout (e.g. after a remote squash-merge landed
+ *  a PRD). ff-only so a diverged local branch is never rewritten; returns
+ *  false when the pull couldn't fast-forward. */
+export const pullFastForward = (): boolean => {
+  try {
+    execSync("git pull --ff-only", { encoding: "utf-8", stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const ghJson = <T>(args: string): T => JSON.parse(gh(args)) as T;
 
 /** Bodies go through --body-file: safe for newlines, backticks, quotes. */
