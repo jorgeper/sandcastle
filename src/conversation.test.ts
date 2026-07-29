@@ -332,8 +332,14 @@ describe("conversation (mocked runner)", () => {
 
     const proposal = await convo.send("free text answer");
     expect(proposal.type).toBe("propose");
-    expect(calls[1]!.options.prompt).toBe("free text answer");
+    // The human's message is prefixed verbatim; the envelope reminder is
+    // appended so run()'s output-tag-in-prompt validation holds on resumed
+    // turns (it only passes naturally on the opening prompt).
+    expect(calls[1]!.options.prompt!.startsWith("free text answer")).toBe(true);
     expect(calls[1]!.options.resumeSession).toBe("sess-1");
+    for (const call of calls) {
+      expect(call.options.prompt).toContain(`<${TURN_TAG}>`);
+    }
 
     const done = await convo.send(APPROVED_MESSAGE);
     expect(done.type).toBe("done");
@@ -411,7 +417,8 @@ describe("conversation (mocked runner)", () => {
     });
     const turn = await convo.recover();
     expect(turn?.type).toBe("propose");
-    expect(calls[0]!.options.prompt).toBe("my answer");
+    expect(calls[0]!.options.prompt!.startsWith("my answer")).toBe(true);
+    expect(calls[0]!.options.prompt).toContain(`<${TURN_TAG}>`);
     expect(calls[0]!.options.resumeSession).toBe("sess-1");
     const roles = convo.messages.map((m) => m.role);
     expect(roles).toEqual(["agent", "human", "agent"]);

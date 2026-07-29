@@ -179,3 +179,12 @@ Rules:
  */
 export const composeConversationProtocol = (rolePrompt: string): string =>
   `${rolePrompt.trim()}\n\n${CONVERSATION_PROTOCOL_INSTRUCTIONS}`;
+
+/**
+ * Appended to every resumed turn's prompt (the human's message) before it is
+ * handed to the agent. Serves two purposes: `run()` requires the
+ * structured-output tag to appear in the prompt (ADR 0010), and a one-line
+ * reminder measurably improves envelope compliance deep into a session. The
+ * conversation store records the human message without it.
+ */
+export const TURN_ENVELOPE_REMINDER = `\n\n(End your reply with exactly one <${TURN_TAG}> envelope, per the conversation protocol.)`;

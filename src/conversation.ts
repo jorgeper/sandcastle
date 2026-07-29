@@ -10,6 +10,7 @@ import { ConversationNotSupportedError } from "./ConversationNotSupportedError.j
 import {
   agentTurnSchema,
   composeConversationProtocol,
+  TURN_ENVELOPE_REMINDER,
   TURN_TAG,
   type AgentTurn,
 } from "./conversationEnvelope.js";
@@ -319,13 +320,20 @@ class ConversationImpl implements Conversation {
     try {
       const runner = this.#options.runner ?? run;
       const logging = this.#buildLogging(options);
+      // Resumed turns carry only the human's message, but run() requires the
+      // structured-output tag to appear in the prompt (ADR 0010). The
+      // reminder satisfies that invariant and re-anchors the protocol for
+      // the agent; the store keeps the clean human message.
+      const turnPrompt = prompt.includes(`<${TURN_TAG}>`)
+        ? prompt
+        : `${prompt}${TURN_ENVELOPE_REMINDER}`;
       let result;
       try {
         result = await runner({
           agent: this.#options.agent,
           sandbox: this.#options.sandbox,
           cwd: this.#options.cwd,
-          prompt,
+          prompt: turnPrompt,
           maxIterations: 1,
           branchStrategy: { type: "branch", branch: this.#metadata.branch },
           resumeSession,
