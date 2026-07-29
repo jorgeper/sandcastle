@@ -568,6 +568,104 @@ describe("conversation (mocked runner)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Keep-alive sandbox (hot path)
+// ---------------------------------------------------------------------------
+
+describe("conversation keep-alive sandbox", () => {
+  it("reuses one sandbox across turns, resumes the session, and closes idempotently", async () => {
+    const dir = await makeDir();
+    const runs: Array<Record<string, unknown>> = [];
+    let factoryCalls = 0;
+    let closed = 0;
+    const script: AgentTurn[] = [
+      { type: "ask", message: "q1" },
+      { type: "propose", message: "draft" },
+    ];
+    const fakeSandbox = {
+      branch: "conversation/hot",
+      worktreePath: "/tmp/wt",
+      run: async (opts: Record<string, unknown>) => {
+        runs.push(opts);
+        const turn = script.shift()!;
+        return {
+          iterations: [{ sessionId: `hot-${runs.length}` }],
+          stdout: `<turn>${JSON.stringify(turn)}</turn>`,
+          commits: [],
+          logFilePath: "/tmp/hot.log",
+        };
+      },
+      exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+      interactive: async () => ({}),
+      close: async () => {
+        closed++;
+        return {};
+      },
+      [Symbol.asyncDispose]: async () => {},
+    };
+    const convo = await conversation.start({
+      name: "hot",
+      agent,
+      sandbox,
+      prompt: "role",
+      dir,
+      sandboxFactory: (async (opts: { branch: string }) => {
+        factoryCalls++;
+        expect(opts.branch).toBe("conversation/hot");
+        return fakeSandbox;
+      }) as never,
+    });
+    expect(convo.lastAgentTurn).toEqual({ type: "ask", message: "q1" });
+    await convo.send("my answer");
+    expect(factoryCalls).toBe(1); // one sandbox for both turns
+    expect(runs).toHaveLength(2);
+    expect(runs[1]!["resumeSession"]).toBe("hot-1");
+    expect(convo.metadata.sessionId).toBe("hot-2");
+    await convo.close();
+    expect(closed).toBe(1);
+    await convo.close();
+    expect(closed).toBe(1); // idempotent
+  });
+
+  it("corrective-resumes exactly once on a missing envelope (hot path)", async () => {
+    const dir = await makeDir();
+    let resumed = 0;
+    const fakeSandbox = {
+      branch: "conversation/hot2",
+      worktreePath: "/tmp/wt",
+      run: async () => ({
+        iterations: [{ sessionId: "s1" }],
+        stdout: "there is no envelope here",
+        commits: [],
+        resume: async (prompt: string) => {
+          resumed++;
+          expect(prompt).toContain("did not produce valid structured output");
+          return {
+            iterations: [{ sessionId: "s1" }],
+            stdout: '<turn>{"type":"ask","message":"fixed"}</turn>',
+            commits: [],
+          };
+        },
+      }),
+      exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+      interactive: async () => ({}),
+      close: async () => ({}),
+      [Symbol.asyncDispose]: async () => {},
+    };
+    const convo = await conversation.start({
+      name: "hot2",
+      agent,
+      sandbox,
+      prompt: "role",
+      dir,
+      sandboxFactory: (async () => fakeSandbox) as never,
+    });
+    expect(convo.lastAgentTurn).toEqual({ type: "ask", message: "fixed" });
+    expect(resumed).toBe(1);
+    expect(convo.status).toBe("awaiting-human");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Provider gating
 // ---------------------------------------------------------------------------
 

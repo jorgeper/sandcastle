@@ -78,6 +78,10 @@ describe("conversational-prd template", () => {
     expect(designer).toContain("prd/NNN");
     expect(decomposer).toContain("{{PRD_FILE}}");
     expect(decomposer).toContain("sub_issues");
+    // Everything agents write on GitHub is attributed via the
+    // [agent · harness · model] marker the scripts pass in.
+    expect(designer).toContain("{{AGENT_MARKER}}");
+    expect(decomposer).toContain("{{AGENT_MARKER}}");
     // The <turn> envelope wire format is library-owned (appended by
     // conversation.start), so prompts must not redefine it.
     expect(designer).not.toContain("<turn>");

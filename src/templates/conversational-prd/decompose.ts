@@ -17,8 +17,13 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 //
 // Ctrl-C is always safe — the conversation is durable and re-attaches.
 
-const agent = claudeCode("claude-opus-4-8");
+const MODEL = "claude-opus-4-8";
+const agent = claudeCode(MODEL);
 const sandbox = docker();
+
+/** Marker prefixed to everything the decomposer writes on GitHub on the
+ *  human's behalf (issue bodies, comments): [agent · harness · model]. */
+const AGENT_MARKER = `**[decomposer · claude-code · ${MODEL}]**`;
 
 const prdFile = process.argv[2]?.trim();
 if (!prdFile) {
@@ -54,7 +59,7 @@ if (existing) {
     agent,
     sandbox,
     promptFile: ".sandcastle/decomposer-prompt.md",
-    promptArgs: { PRD_FILE: prdFile },
+    promptArgs: { PRD_FILE: prdFile, AGENT_MARKER },
   });
 }
 

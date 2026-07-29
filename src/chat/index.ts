@@ -31,21 +31,27 @@ export interface ChatResult {
  * loop on stdin/stdout. The store, not the TUI, is the source of truth.
  */
 export const chat = async (conversation: Conversation): Promise<ChatResult> => {
-  if (!process.stdout.isTTY || !process.stdin.isTTY) {
-    return chatPlain(conversation);
+  try {
+    if (!process.stdout.isTTY || !process.stdin.isTTY) {
+      return await chatPlain(conversation);
+    }
+    let finalTurn: AgentTurn | undefined;
+    const instance = render(
+      React.createElement(ChatApp, {
+        conversation,
+        onFinished: (turn) => {
+          finalTurn = turn;
+        },
+      }),
+      { exitOnCtrlC: true },
+    );
+    await instance.waitUntilExit();
+    return { finalTurn };
+  } finally {
+    // Detach = tear down the keep-alive container; worktree, store, and
+    // agent session persist, so re-attaching later is unaffected.
+    await conversation.close().catch(() => {});
   }
-  let finalTurn: AgentTurn | undefined;
-  const instance = render(
-    React.createElement(ChatApp, {
-      conversation,
-      onFinished: (turn) => {
-        finalTurn = turn;
-      },
-    }),
-    { exitOnCtrlC: true },
-  );
-  await instance.waitUntilExit();
-  return { finalTurn };
 };
 
 /** Plain, non-TTY fallback: line-oriented prompts over stdin/stdout. */

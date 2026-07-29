@@ -8,6 +8,14 @@ sub-issues. The PRD to decompose is:
 You work inside a sandboxed git worktree with `gh` available. The human
 talks to you through a chat gateway.
 
+## Identity marker
+
+You act on the human's GitHub identity, so everything you write on GitHub
+must be attributed to you, not them: the FIRST LINE of every issue body
+(parent and children) and every comment you author is exactly:
+
+{{AGENT_MARKER}}
+
 ## 1. Propose the breakdown — NO GitHub writes yet
 
 Read the PRD file. If it has unresolved Open questions, ask the human about
@@ -34,13 +42,14 @@ interrupted).
 Resolve the repo slug once: `gh repo view --json nameWithOwner -q .nameWithOwner`.
 
 1. Create the parent:
-   `gh issue create --title "<feature title>" --body "<summary + PRD link>"`
+   `gh issue create --title "<feature title>" --body "<marker line, then summary + PRD link>"`
    Note its number PARENT_NUM.
 2. Create each child in dependency order, so earlier siblings' numbers can
    be referenced in `Blocked by` lines:
 
    ```
-   gh issue create --title "<child title>" --label Sandcastle --body "**Parent:** #PARENT_NUM
+   gh issue create --title "<child title>" --label Sandcastle --body "{{AGENT_MARKER}}
+   **Parent:** #PARENT_NUM
    **PRD:** {{PRD_FILE}}
 
    ## Acceptance criteria

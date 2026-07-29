@@ -4,7 +4,14 @@ import type { AgentProvider } from "./AgentProvider.js";
 import type { SandboxProvider } from "./SandboxProvider.js";
 import type { SandboxHooks } from "./SandboxLifecycle.js";
 import type { AgentStreamEvent } from "./AgentStreamEmitter.js";
-import { run, type LoggingOption, type Timeouts } from "./run.js";
+import {
+  run,
+  buildStructuredOutputRetryFeedback,
+  type LoggingOption,
+  type Timeouts,
+} from "./run.js";
+import { createSandbox, type Sandbox } from "./createSandbox.js";
+import { extractStructuredOutput } from "./extractStructuredOutput.js";
 import { Output, StructuredOutputError } from "./Output.js";
 import { ConversationNotSupportedError } from "./ConversationNotSupportedError.js";
 import {
@@ -65,10 +72,25 @@ interface ConversationRuntimeOptions {
   /** Completion grace window per turn, as in `RunOptions.completionTimeoutSeconds`. */
   readonly completionTimeoutSeconds?: number;
   /**
-   * Test seam: replaces `run()` for turn execution.
+   * Keep one live sandbox between turns while this process holds the
+   * conversation (default: `true`). The container starts once and every
+   * turn reuses it, which is what makes interactive chat snappy; `close()`
+   * (or process exit) tears the container down — the worktree, store, and
+   * agent session always persist, so detach/re-attach is unaffected. Set to
+   * `false` to spin a fresh sandbox per turn instead.
+   */
+  readonly keepSandbox?: boolean;
+  /**
+   * Test seam: replaces `run()` for turn execution (forces the
+   * fresh-sandbox-per-turn path).
    * @internal
    */
   readonly runner?: typeof run;
+  /**
+   * Test seam: replaces `createSandbox()` for the keep-alive path.
+   * @internal
+   */
+  readonly sandboxFactory?: typeof createSandbox;
 }
 
 export interface ConversationStartOptions extends ConversationRuntimeOptions {
@@ -130,6 +152,12 @@ export interface Conversation {
    * recover.
    */
   recover(options?: ConversationSendOptions): Promise<AgentTurn | undefined>;
+  /**
+   * Tear down the live keep-alive sandbox, if one is running (container
+   * only — the worktree, store, and agent session persist, so the
+   * conversation re-attaches normally afterwards). No-op otherwise.
+   */
+  close(): Promise<void>;
 }
 
 const CONVERSATION_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/;
@@ -182,6 +210,7 @@ class ConversationImpl implements Conversation {
   #metadata: ConversationMetadata;
   #messages: ConversationMessage[];
   #inFlight = false;
+  #liveSandbox: Sandbox | undefined;
 
   constructor(
     store: ConversationStore,
@@ -311,6 +340,26 @@ class ConversationImpl implements Conversation {
     };
   }
 
+  async close(): Promise<void> {
+    const sandbox = this.#liveSandbox;
+    this.#liveSandbox = undefined;
+    if (sandbox) await sandbox.close();
+  }
+
+  async #ensureSandbox(): Promise<Sandbox> {
+    if (!this.#liveSandbox) {
+      const factory = this.#options.sandboxFactory ?? createSandbox;
+      this.#liveSandbox = await factory({
+        branch: this.#metadata.branch,
+        sandbox: this.#options.sandbox,
+        cwd: this.#options.cwd,
+        hooks: this.#options.hooks,
+        timeouts: this.#options.timeouts,
+      });
+    }
+    return this.#liveSandbox;
+  }
+
   async #runTurn(
     prompt: string,
     resumeSession: string | undefined,
@@ -318,42 +367,29 @@ class ConversationImpl implements Conversation {
   ): Promise<AgentTurn> {
     this.#inFlight = true;
     try {
-      const runner = this.#options.runner ?? run;
       const logging = this.#buildLogging(options);
-      // Resumed turns carry only the human's message, but run() requires the
-      // structured-output tag to appear in the prompt (ADR 0010). The
-      // reminder satisfies that invariant and re-anchors the protocol for
-      // the agent; the store keeps the clean human message.
+      // Resumed turns carry only the human's message, but every turn prompt
+      // must contain the structured-output tag (run() enforces it, ADR
+      // 0010). The reminder satisfies that invariant and re-anchors the
+      // protocol for the agent; the store keeps the clean human message.
       const turnPrompt = prompt.includes(`<${TURN_TAG}>`)
         ? prompt
         : `${prompt}${TURN_ENVELOPE_REMINDER}`;
-      let result;
+      // The runner seam and keepSandbox: false use a fresh sandbox per turn;
+      // the default keeps one sandbox alive across turns for fast
+      // interactive chat.
+      const useColdPath =
+        this.#options.runner !== undefined ||
+        this.#options.keepSandbox === false;
+      let outcome: TurnOutcome;
       try {
-        result = await runner({
-          agent: this.#options.agent,
-          sandbox: this.#options.sandbox,
-          cwd: this.#options.cwd,
-          prompt: turnPrompt,
-          maxIterations: 1,
-          branchStrategy: { type: "branch", branch: this.#metadata.branch },
-          resumeSession,
-          output: Output.object({
-            tag: TURN_TAG,
-            schema: agentTurnSchema,
-            maxRetries: 1,
-          }),
-          logging,
-          hooks: this.#options.hooks,
-          timeouts: this.#options.timeouts,
-          signal: this.#options.signal,
-          idleTimeoutSeconds: this.#options.idleTimeoutSeconds,
-          completionTimeoutSeconds: this.#options.completionTimeoutSeconds,
-          name: this.#metadata.role ?? "conversation",
-        });
+        outcome = useColdPath
+          ? await this.#runTurnCold(turnPrompt, resumeSession, logging)
+          : await this.#runTurnHot(turnPrompt, resumeSession, logging);
       } catch (error) {
         if (error instanceof StructuredOutputError) {
-          // The corrective resume (maxRetries: 1) already ran and the agent
-          // still failed to emit a valid envelope: the turn fails.
+          // The corrective resume already ran and the agent still failed to
+          // emit a valid envelope: the turn fails.
           this.#metadata = await this.#store.updateMetadata({
             status: "failed",
             sessionId: error.sessionId ?? this.#metadata.sessionId,
@@ -364,9 +400,8 @@ class ConversationImpl implements Conversation {
         throw error;
       }
 
-      const turn = result.output as AgentTurn;
-      const sessionId =
-        result.iterations.at(-1)?.sessionId ?? this.#metadata.sessionId;
+      const turn = outcome.turn;
+      const sessionId = outcome.sessionId ?? this.#metadata.sessionId;
       const agentMessage = await this.#store.appendMessage({
         role: "agent",
         body: turn,
@@ -375,9 +410,9 @@ class ConversationImpl implements Conversation {
       this.#metadata = await this.#store.updateMetadata({
         status: turn.type === "done" ? "done" : "awaiting-human",
         sessionId,
-        logPath: result.logFilePath ?? this.#metadata.logPath,
+        logPath: outcome.logFilePath ?? this.#metadata.logPath,
         worktreePath:
-          result.preservedWorktreePath ?? this.#metadata.worktreePath,
+          outcome.preservedWorktreePath ?? this.#metadata.worktreePath,
         artifacts:
           turn.type === "done"
             ? [
@@ -393,6 +428,116 @@ class ConversationImpl implements Conversation {
       this.#inFlight = false;
     }
   }
+
+  /** Fresh sandbox per turn via run(); structured output extracted and
+   *  corrective-resumed by run() itself (output.maxRetries). */
+  async #runTurnCold(
+    turnPrompt: string,
+    resumeSession: string | undefined,
+    logging: LoggingOption,
+  ): Promise<TurnOutcome> {
+    const runner = this.#options.runner ?? run;
+    const result = await runner({
+      agent: this.#options.agent,
+      sandbox: this.#options.sandbox,
+      cwd: this.#options.cwd,
+      prompt: turnPrompt,
+      maxIterations: 1,
+      branchStrategy: { type: "branch", branch: this.#metadata.branch },
+      resumeSession,
+      output: Output.object({
+        tag: TURN_TAG,
+        schema: agentTurnSchema,
+        maxRetries: 1,
+      }),
+      logging,
+      hooks: this.#options.hooks,
+      timeouts: this.#options.timeouts,
+      signal: this.#options.signal,
+      idleTimeoutSeconds: this.#options.idleTimeoutSeconds,
+      completionTimeoutSeconds: this.#options.completionTimeoutSeconds,
+      name: this.#metadata.role ?? "conversation",
+    });
+    return {
+      turn: result.output as AgentTurn,
+      sessionId: result.iterations.at(-1)?.sessionId,
+      logFilePath: result.logFilePath,
+      preservedWorktreePath: result.preservedWorktreePath,
+    };
+  }
+
+  /** Keep-alive path: one live sandbox across turns via sandbox.run().
+   *  sandbox.run() has no structured-output option, so extraction (and the
+   *  single corrective resume) happens here. */
+  async #runTurnHot(
+    turnPrompt: string,
+    resumeSession: string | undefined,
+    logging: LoggingOption,
+  ): Promise<TurnOutcome> {
+    const sandbox = await this.#ensureSandbox();
+    const definition = Output.object({
+      tag: TURN_TAG,
+      schema: agentTurnSchema,
+    });
+    const common = {
+      logging,
+      signal: this.#options.signal,
+      idleTimeoutSeconds: this.#options.idleTimeoutSeconds,
+      completionTimeoutSeconds: this.#options.completionTimeoutSeconds,
+      name: this.#metadata.role ?? "conversation",
+    };
+    let result = await sandbox.run({
+      agent: this.#options.agent,
+      prompt: turnPrompt,
+      maxIterations: 1,
+      resumeSession,
+      ...common,
+    });
+    const context = (r: typeof result) => ({
+      commits: r.commits,
+      branch: this.#metadata.branch,
+      sessionId: r.iterations.at(-1)?.sessionId,
+      sessionFilePath: r.iterations.at(-1)?.sessionFilePath,
+    });
+    try {
+      const turn = (await extractStructuredOutput(
+        result.stdout,
+        definition,
+        context(result),
+      )) as AgentTurn;
+      return {
+        turn,
+        sessionId: result.iterations.at(-1)?.sessionId,
+        logFilePath: result.logFilePath,
+      };
+    } catch (error) {
+      if (!(error instanceof StructuredOutputError) || !result.resume) {
+        throw error;
+      }
+      // One corrective resume, mirroring run()'s output.maxRetries: 1.
+      result = await result.resume(
+        buildStructuredOutputRetryFeedback(error, 0),
+        common,
+      );
+      const turn = (await extractStructuredOutput(
+        result.stdout,
+        definition,
+        context(result),
+      )) as AgentTurn;
+      return {
+        turn,
+        sessionId: result.iterations.at(-1)?.sessionId,
+        logFilePath: result.logFilePath,
+      };
+    }
+  }
+}
+
+interface TurnOutcome {
+  readonly turn: AgentTurn;
+  readonly sessionId?: string;
+  readonly logFilePath?: string;
+  readonly preservedWorktreePath?: string;
 }
 
 const resolveDir = (options: {

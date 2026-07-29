@@ -19,11 +19,13 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 //
 // Ctrl-C is always safe — the conversation is durable and re-attaches.
 
-const agent = claudeCode("claude-opus-4-8");
+const MODEL = "claude-opus-4-8";
+const agent = claudeCode(MODEL);
 const sandbox = docker();
 
-/** Marker the designer prefixes its own PR replies with (see designer-prompt.md). */
-const DESIGNER_MARKER = "**[designer · sandcastle]**";
+/** Marker prefixed to everything the designer writes on GitHub on the
+ *  human's behalf (PR body, PR replies): [agent · harness · model]. */
+const AGENT_MARKER = `**[designer · claude-code · ${MODEL}]**`;
 const POLL_SECONDS = 30;
 
 const slugify = (text: string): string =>
@@ -103,7 +105,7 @@ async function startDesign(topic: string): Promise<Conversation> {
     agent,
     sandbox,
     promptFile: ".sandcastle/designer-prompt.md",
-    promptArgs: { TOPIC: topic },
+    promptArgs: { TOPIC: topic, AGENT_MARKER },
   });
 }
 
@@ -122,6 +124,15 @@ if (prUrl === undefined) {
 // --- Phase B: PR review — same conversation, PR comments as the transport ----
 
 console.log(`\nWatching ${prUrl} for feedback (Ctrl-C to detach)…`);
+
+// The keep-alive sandbox stays up between polls; tear it down on Ctrl-C so
+// detaching doesn't leak a running container (worktree/store/session persist).
+process.on("SIGINT", () => {
+  void convo
+    .close()
+    .catch(() => {})
+    .then(() => process.exit(0));
+});
 const feedbackStatePath = join(
   ".sandcastle",
   "conversations",
@@ -172,8 +183,7 @@ for (;;) {
       at: c.createdAt ?? c.submittedAt ?? "",
     }))
     .filter(
-      (c) =>
-        c.body !== "" && !c.body.startsWith(DESIGNER_MARKER) && c.at > cutoff,
+      (c) => c.body !== "" && !c.body.startsWith(AGENT_MARKER) && c.at > cutoff,
     )
     .sort((a, b) => a.at.localeCompare(b.at));
 
@@ -193,3 +203,5 @@ for (;;) {
   }
   await sleep(POLL_SECONDS);
 }
+
+await convo.close();

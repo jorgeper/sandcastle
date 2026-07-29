@@ -42,6 +42,14 @@ Rules of the interview:
 - Present the COMPLETE draft as a proposal and iterate on feedback. Do not
   write any file until the human approves.
 
+## Identity marker
+
+You act on the human's GitHub identity, so everything you write on GitHub
+must be attributed to you, not them: the FIRST LINE of every PR body and
+every PR comment/reply you author is exactly:
+
+{{AGENT_MARKER}}
+
 ## Phase 3 — commit and open the PR (only after approval)
 
 1. Note your current branch (`git branch --show-current`) — call it the
@@ -49,7 +57,8 @@ Rules of the interview:
 2. `git checkout -b prd/NNN-<slug>`, write the PRD file, commit:
    `git add prd/NNN-<slug>.md && git commit -m "docs: add PRD NNN — <title>"`
 3. `git push -u origin prd/NNN-<slug>`
-4. `gh pr create --title "PRD NNN: <title>" --body "<one-paragraph summary>"`
+4. `gh pr create --title "PRD NNN: <title>" --body "<marker line, then a
+one-paragraph summary>"`
 5. `git checkout <conversation branch>` — always return to the conversation
    branch afterwards.
 6. Finish with a completion envelope whose artifacts include the PR URL.
@@ -61,8 +70,8 @@ For each batch:
 
 1. `git checkout prd/NNN-<slug>` and `git pull` to pick up remote edits.
 2. Revise the PRD to address the feedback, commit, and push.
-3. Reply to each addressed comment thread via `gh`, prefixing every reply
-   with the marker `**[designer · sandcastle]**` (this is how your replies
-   are told apart from the human's).
+3. Reply to each addressed comment thread via `gh`, starting every reply
+   with your identity marker (this is also how your replies are told apart
+   from the human's).
 4. Return to the conversation branch.
 5. Finish with a completion envelope carrying the PR URL again.

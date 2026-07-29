@@ -724,7 +724,9 @@ The protocol instructions are library-owned and appended to the opening prompt b
 
 Mechanics and constraints:
 
-- Each turn is `run()` with `maxIterations: 1` against the branch `conversation/<id>` (worktree reused across turns and processes) and session resume — conversations require filesystem-backed sessions, so only `claudeCode` is supported in v1; other providers throw `ConversationNotSupportedError`.
+- Each turn is one iteration against the branch `conversation/<id>` (worktree reused across turns and processes) and session resume — conversations require filesystem-backed sessions, so only `claudeCode` is supported in v1; other providers throw `ConversationNotSupportedError`.
+- While a process holds the conversation, one sandbox is kept alive across turns (`keepSandbox`, default `true`) so interactive chat doesn't pay container startup per turn. `close()` — called automatically when `chat()` exits or you detach — tears down the container only; the worktree, store, and agent session persist. Set `keepSandbox: false` for a fresh sandbox per turn.
+- Captured agent sessions live in Claude Code's native store (`~/.claude/projects/…`) and are subject to its `cleanupPeriodDays` retention (default 30 days): a conversation dormant past that window keeps its transcript and worktree but can no longer resume the agent's context.
 - Concurrent `send()` on the same conversation fails fast (worktree lock).
 - `promptArgs` substitution is applied host-side to the opening prompt; shell (`` !`cmd` ``) expansion is not.
 
