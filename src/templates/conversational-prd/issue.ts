@@ -17,6 +17,7 @@ import {
   getIssue,
   createIssue,
   laneNudge,
+  summarizeTitle,
 } from "./shared.ts";
 
 // Filer lane — capture first, enrich optionally.
@@ -102,7 +103,7 @@ const report = process.argv.slice(2).join(" ").trim();
 if (report !== "") {
   // Capture: instant, no agent. Unlabeled = on hold.
   const issueNumber = createIssue({
-    title: report.length > 80 ? `${report.slice(0, 77)}…` : report,
+    title: summarizeTitle(report),
     body: `${AGENT_MARKER}\n\n${report}\n\n_Captured via issue.ts on behalf of the owner._`,
   });
   console.log(`Filed #${issueNumber} (on hold, unlabeled).`);
@@ -127,7 +128,7 @@ if (report !== "") {
     const text = await ask("No held issues. What's the issue? ");
     if (text === "") process.exit(0);
     const issueNumber = createIssue({
-      title: text.length > 80 ? `${text.slice(0, 77)}…` : text,
+      title: summarizeTitle(text),
       body: `${AGENT_MARKER}\n\n${text}\n\n_Captured via issue.ts on behalf of the owner._`,
     });
     console.log(`Filed #${issueNumber} (on hold, unlabeled).`);
@@ -147,7 +148,7 @@ if (report !== "") {
       await develop(held[index - 1]!.number);
     } else if (answer !== "") {
       const issueNumber = createIssue({
-        title: answer.length > 80 ? `${answer.slice(0, 77)}…` : answer,
+        title: summarizeTitle(answer),
         body: `${AGENT_MARKER}\n\n${answer}\n\n_Captured via issue.ts on behalf of the owner._`,
       });
       console.log(`Filed #${issueNumber} (on hold, unlabeled).`);

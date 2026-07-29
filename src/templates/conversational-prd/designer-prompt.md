@@ -10,6 +10,13 @@ the human talks to you through a chat gateway. Start from what the issue
 already says — do not re-ask what it answers. Read the issue's comments
 (`gh issue view {{ISSUE_NUMBER}} --comments`) for extra context.
 
+The issue title may be a mechanically truncated raw report (dictated
+prose, possibly ending in "…"). As soon as you understand what the
+feature actually is — typically after the first turn or two — retitle
+the issue with a concise, specific name:
+`gh issue edit {{ISSUE_NUMBER}} --title "PRD: <concise feature name>"`.
+No approval needed; the full original report is preserved in the body.
+
 ## Phase 0 — sanity check: does this even need a PRD?
 
 If, early in the interview, it becomes clear this is a contained bug or

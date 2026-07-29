@@ -176,6 +176,21 @@ export const laneNudge = (
 // CLI helpers
 // ---------------------------------------------------------------------------
 
+/** Deterministic title from a raw (often dictated) report: whitespace
+ * collapsed, first sentence when it fits, otherwise a word-boundary
+ * truncation with an ellipsis. Keeps titles scannable while the full report
+ * lands in the body; the conversational agents retitle properly once they
+ * understand the work. */
+export const summarizeTitle = (text: string, maxLength = 80): string => {
+  const oneLine = text.trim().replace(/\s+/g, " ");
+  const sentence = oneLine.match(/^[^.!?]{3,}?[.!?]+(?=\s)/)?.[0];
+  const candidate = sentence ? sentence.replace(/[.!?]+$/, "") : oneLine;
+  if (candidate.length <= maxLength) return candidate;
+  const cut = oneLine.slice(0, maxLength - 1);
+  const atWord = cut.includes(" ") ? cut.slice(0, cut.lastIndexOf(" ")) : cut;
+  return `${atWord.trimEnd()}…`;
+};
+
 /** What a picker answer means: nothing → finish, an in-range number → that
  * candidate (0-based), anything else → a new topic to file. Only pure
  * integers count as picks, so out-of-range or decimal input becomes a topic

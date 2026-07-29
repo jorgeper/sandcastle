@@ -63,6 +63,29 @@ describe("conversational-prd template", () => {
     expect(filingSites.length).toBeGreaterThanOrEqual(3);
   });
 
+  it("raw reports become summarized titles, refined later by the agents", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir);
+    const design = await readFile(
+      join(dir, ".sandcastle", "design.ts"),
+      "utf-8",
+    );
+    const issue = await readFile(join(dir, ".sandcastle", "issue.ts"), "utf-8");
+    const designer = await readFile(
+      join(dir, ".sandcastle", "designer-prompt.md"),
+      "utf-8",
+    );
+    // A dictated paragraph must not become the issue title verbatim: both
+    // filing paths derive the title via the shared summarizer (full text
+    // still lands in the body).
+    expect(design).toContain("summarizeTitle");
+    expect(issue).toContain("summarizeTitle");
+    expect(issue).not.toContain("report.slice");
+    // The designer owns the real summary: once it understands the feature,
+    // it retitles the issue.
+    expect(designer).toContain("gh issue edit {{ISSUE_NUMBER}} --title");
+  });
+
   it("scripts are thin wrappers over conversation + chat", async () => {
     const dir = await makeDir();
     await runScaffold(dir);

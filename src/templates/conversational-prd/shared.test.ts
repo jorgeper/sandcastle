@@ -1,5 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { interpretPickerAnswer } from "./shared.ts";
+import { interpretPickerAnswer, summarizeTitle } from "./shared.ts";
+
+describe("summarizeTitle", () => {
+  it("returns short text unchanged", () => {
+    expect(summarizeTitle("search is slow on big repos")).toBe(
+      "search is slow on big repos",
+    );
+  });
+
+  it("collapses newlines and repeated whitespace", () => {
+    expect(summarizeTitle("search   is\nslow")).toBe("search is slow");
+  });
+
+  it("uses the first sentence when it fits, dropping the terminator", () => {
+    expect(
+      summarizeTitle(
+        "I want dictation formatting. So I want to brainstorm how to implement that.",
+      ),
+    ).toBe("I want dictation formatting");
+  });
+
+  it("truncates a long first sentence at a word boundary with an ellipsis", () => {
+    const long =
+      "I am thinking about prototyping a feature where as I'm dictating I can somehow do things like formatting in bullet points";
+    const title = summarizeTitle(long);
+    expect(title.length).toBeLessThanOrEqual(80);
+    expect(title.endsWith("…")).toBe(true);
+    expect(title).not.toContain("  ");
+    // Word boundary: the character before the ellipsis is not a space and
+    // the title is a prefix of the source text plus the ellipsis.
+    expect(long.startsWith(title.slice(0, -1).trimEnd())).toBe(true);
+  });
+
+  it("respects a custom maximum length", () => {
+    const title = summarizeTitle("one two three four five six seven", 15);
+    expect(title.length).toBeLessThanOrEqual(15);
+    expect(title.endsWith("…")).toBe(true);
+  });
+});
 
 describe("interpretPickerAnswer", () => {
   it("finishes on empty or whitespace-only input", () => {
