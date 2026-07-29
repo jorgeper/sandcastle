@@ -1357,6 +1357,22 @@ describe("InitService scaffold", () => {
       expect(prompt).not.toContain("specs/issue-{{TASK_ID}}");
     });
 
+    it("spec commit is pushed in every mode so the SHA-pinned link resolves", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      // Non-PR issues merge locally (SHAs preserved) but only reach origin at
+      // the end of a successful run — never if the goal isn't met — so a
+      // PR-mode-only push left the spec comment's blob link 404ing.
+      expect(mainTs).toContain("in every mode");
+      expect(mainTs).not.toMatch(/isPrMode\)\s*\{\s*\n\s*await pushBranch/);
+    });
+
     it("doctor probes GH_TOKEN issue access, not just authentication", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {

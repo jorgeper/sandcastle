@@ -647,11 +647,12 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         const spec = specSchema.parse(JSON.parse(specJson));
         console.log(`  #${issue.id}: spec at ${spec.specPath}`);
 
-        // Push the spec commit right away (PR mode) so the SHA-pinned link
-        // in the spec-writer's issue comment resolves immediately.
-        if (isPrMode) {
-          await pushBranch(sandbox.worktreePath, issue.branch);
-        }
+        // Push the spec commit right away in every mode so the SHA-pinned
+        // link in the spec-writer's issue comment resolves immediately.
+        // Non-PR issues merge locally (true merge, SHAs preserved) but only
+        // reach origin at the end of a successful run — and never if the
+        // goal isn't met — so gating this on PR mode left the link 404ing.
+        await pushBranch(sandbox.worktreePath, issue.branch);
 
         // Implementer in goal mode: the inner /goal turn loop works and
         // self-verifies (judge checks the condition after every turn); the
