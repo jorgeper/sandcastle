@@ -140,7 +140,7 @@ two-line report into a well-formed, correctly routed issue.
 
 1. `issue.ts "search is slow on big repos"` (or no args → prompt). No
    issue-anchoring on entry — the issue is this lane's **output**.
-   Conversation id: `file-<slug>`, role `filer`.
+   Conversation id: `issue-<slug>`, role `filer`.
 2. The filer asks **at most 2–3 clarifying questions, and only if the
    report is ambiguous** (repro, expected vs. actual, acceptance
    criteria). A clear report goes straight to the proposal. It grounds

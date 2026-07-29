@@ -42,7 +42,7 @@ if (report === "") {
 
 ensureLabel(DESIGN_LABEL, "Needs a PRD; grill the owner");
 
-const convoId = `file-${slugify(report)}`;
+const convoId = `issue-${slugify(report)}`;
 let convo: Conversation;
 const existing = (await conversation.list()).find((s) => s.id === convoId);
 if (existing) {
