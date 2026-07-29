@@ -23,6 +23,7 @@ import {
   commentOnIssue,
   findIssueByTitle,
   decomposeIssueTitle,
+  linkSubIssue,
   numberFromUrl,
   pullFastForward,
   laneNudge,
@@ -77,16 +78,20 @@ const createHandoffIssue = (
   }
   ensureLabel(DECOMPOSE_LABEL, "Merged PRD needs an issue breakdown");
   const title = decomposeIssueTitle(prdFile);
-  const already = findIssueByTitle(title);
-  if (already !== undefined) {
-    console.log(`  decompose issue already exists: #${already}.`);
+  let decomposeIssue = findIssueByTitle(title);
+  if (decomposeIssue !== undefined) {
+    console.log(`  decompose issue already exists: #${decomposeIssue}.`);
   } else {
-    const n = createIssue({
+    decomposeIssue = createIssue({
       title,
       label: DECOMPOSE_LABEL,
       body: `${AGENT_MARKER}\n\n**PRD:** ${prdFile}\n\nFollows #${designIssue}.`,
     });
-    console.log(`  filed decompose issue #${n}.`);
+    console.log(`  filed decompose issue #${decomposeIssue}.`);
+  }
+  // Chain the tree: the decompose issue is a sub-issue of the design issue.
+  if (linkSubIssue(repoSlug, designIssue, decomposeIssue)) {
+    console.log(`  linked #${decomposeIssue} as sub-issue of #${designIssue}.`);
   }
   awaitingYou.push(`Decompose ${prdFile}:  npm run sandcastle:decompose`);
 };

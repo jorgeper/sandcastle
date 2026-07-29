@@ -20,6 +20,8 @@ import {
   decomposeIssueTitle,
   parsePrdLine,
   pullFastForward,
+  linkSubIssue,
+  numberFromUrl,
   gh,
   laneNudge,
 } from "./shared.ts";
@@ -144,6 +146,26 @@ const { finalTurn } = await chat(convo);
 if (finalTurn?.type === "done" && finalTurn.artifacts.length > 0) {
   console.log("\nCreated issues:");
   for (const url of finalTurn.artifacts) console.log(`  ${url}`);
+
+  // Chain the tree: the feature parent (the created issue without a
+  // **Parent:** line) becomes a sub-issue of this decompose issue, so the
+  // whole design → decompose → parent → children hierarchy is one tree.
+  const repoSlug = gh(
+    "repo view --json nameWithOwner -q .nameWithOwner",
+  ).trim();
+  for (const url of finalTurn.artifacts) {
+    if (!url.includes("/issues/")) continue;
+    const n = numberFromUrl(url);
+    if (n === undefined || n === issueNumber) continue;
+    const body = getIssue(n).body;
+    if (!body.includes("**Parent:**")) {
+      if (linkSubIssue(repoSlug, issueNumber, n)) {
+        console.log(`Linked parent #${n} as sub-issue of #${issueNumber}.`);
+      }
+      break;
+    }
+  }
+
   if (getIssue(issueNumber).state === "OPEN") {
     try {
       gh(

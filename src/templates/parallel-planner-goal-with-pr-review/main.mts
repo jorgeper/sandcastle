@@ -728,10 +728,17 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           `Implemented over ${implement.commits.length} commit(s); see the commit history for details.`,
         ].join("\n");
 
+        // Guarantee the PR ↔ issue link regardless of what the pr-writer
+        // produced — the closing keyword is what ties the chain together.
+        const closesLine = new RegExp(`(Closes|Fixes|Resolves) #${issue.id}\\b`).test(
+          body,
+        )
+          ? ""
+          : `\n\nCloses #${issue.id}`;
         const prNumber = await github.createPr({
           branch: issue.branch,
           title,
-          body: `${markerFor("implementer", "claude-code", implementerModel)} opened this PR.\n\n${body}`,
+          body: `${markerFor("implementer", "claude-code", implementerModel)} opened this PR.\n\n${body}${closesLine}`,
         });
         console.log(`  #${issue.id}: opened PR #${prNumber}`);
         await runDebate(sandbox, prNumber, issue.branch, "pr-reviewer");

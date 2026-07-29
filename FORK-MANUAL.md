@@ -32,11 +32,14 @@ bug.
       sandcastle:approved)  in chat)            on require-pr PRs)
 ```
 
-The chain is fully traceable: design issue #41 → anchor comment →
-conversation → PRD PR #45 (`Closes #41`, `sandcastle:ready`) → approved →
-script merges → decompose issue #46 (`**PRD:**` line, `Follows #41`) →
-parent #47 + children #48–#50 → impl PRs. Nothing exists without an issue
-that says why.
+The chain is fully traceable **and a real GitHub sub-issue tree**: design
+issue #41 → anchor comment → conversation → PRD PR #45 (`Closes #41`,
+`sandcastle:ready`) → approved → script merges → decompose issue #46
+(sub-issue of #41, `**PRD:**` line) → parent #47 (sub-issue of #46) +
+children #48–#50 (sub-issues of #47) → impl PRs (`Closes #<child>`,
+enforced by the orchestrator even if the pr-writer forgets). Expand the
+design issue in GitHub's issue list and the entire feature unfolds under
+it. Nothing exists without an issue that says why.
 
 ## Lane 0 — File (a report → a well-routed issue)
 

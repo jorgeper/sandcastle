@@ -128,6 +128,25 @@ export const commentOnIssue = (n: number, body: string): void => {
   gh(`issue comment ${n} --body-file ${JSON.stringify(bodyFile(body))}`);
 };
 
+/** Link `child` as a GitHub sub-issue of `parent` (the endpoint takes the
+ *  child's database id, not its number). Non-fatal and effectively
+ *  idempotent: linking an already-linked child just fails quietly. */
+export const linkSubIssue = (
+  repoSlug: string,
+  parent: number,
+  child: number,
+): boolean => {
+  try {
+    const childId = gh(`api repos/${repoSlug}/issues/${child} --jq .id`).trim();
+    gh(
+      `api repos/${repoSlug}/issues/${parent}/sub_issues -F sub_issue_id=${childId} 2>/dev/null`,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /** Exact-title search across open+closed issues (idempotent re-run key). */
 export const findIssueByTitle = (title: string): number | undefined =>
   ghJson<IssueSummary[]>(
