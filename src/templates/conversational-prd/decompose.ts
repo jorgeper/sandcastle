@@ -24,6 +24,7 @@ import {
   numberFromUrl,
   gh,
   laneNudge,
+  preflight,
 } from "./shared.ts";
 
 // Decomposer lane: a decompose issue in → breakdown conversation →
@@ -39,6 +40,7 @@ const agent = claudeCode(MODEL);
 const sandbox = docker();
 const AGENT_MARKER = markerFor("decomposer");
 
+await preflight();
 ensureLabel(DECOMPOSE_LABEL, "Merged PRD needs an issue breakdown");
 
 // --- Resolve the decompose issue ---------------------------------------------

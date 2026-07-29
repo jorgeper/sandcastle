@@ -1357,6 +1357,22 @@ describe("InitService scaffold", () => {
       expect(prompt).not.toContain("specs/issue-{{TASK_ID}}");
     });
 
+    it("doctor probes GH_TOKEN issue access, not just authentication", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const setup = await readFile(
+        join(dir, ".sandcastle", "setup.mts"),
+        "utf-8",
+      );
+      // A contents-only fine-grained PAT passes `gh api user` but strands
+      // sandbox agents on issue/PR operations — the probe catches it and
+      // the hint says how to fix it.
+      expect(setup).toContain("issues?per_page=1");
+      expect(setup).toContain("regenerate the token");
+    });
+
     it("main.mts exposes the spec dir and goal knobs in the configuration block", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {

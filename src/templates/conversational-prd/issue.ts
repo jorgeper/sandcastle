@@ -17,6 +17,7 @@ import {
   getIssue,
   createIssue,
   laneNudge,
+  preflight,
   summarizeTitle,
 } from "./shared.ts";
 
@@ -69,6 +70,9 @@ const guidanceFor = (issueNumber: number): void => {
 };
 
 const develop = async (issueNumber: number): Promise<void> => {
+  // Preflight here, not at capture: capture must stay instant, and only the
+  // develop conversation needs the sandbox credentials.
+  await preflight();
   const issue = getIssue(issueNumber);
   const convoId = `issue-${issueNumber}`;
   let convo: Conversation;

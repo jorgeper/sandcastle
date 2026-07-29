@@ -137,10 +137,27 @@ export const runDoctor = async (): Promise<number> => {
     await execFileAsync("gh", ["api", "user"], {
       env: { ...process.env, GH_TOKEN: envVars.GH_TOKEN },
     });
+    // A contents-only fine-grained PAT passes the auth probe above but
+    // strands sandbox agents on issue/PR operations — probe issue access.
+    const slug = await github.repoSlug();
+    try {
+      await execFileAsync(
+        "gh",
+        ["api", `repos/${slug}/issues?per_page=1`, "--silent"],
+        { env: { ...process.env, GH_TOKEN: envVars.GH_TOKEN } },
+      );
+    } catch {
+      return {
+        ok: false,
+        detail:
+          "authenticates but cannot read this repo's issues — sandbox agents will fail on issue/PR operations",
+        hint: "regenerate the token with Contents + Issues + Pull requests R/W (fine-grained) or `repo` scope (classic), then update GH_TOKEN in .sandcastle/.env",
+      };
+    }
     return {
       ok: true,
       detail:
-        "present and authenticates (write scopes can't be probed — PR mode needs Contents+PRs+Issues R/W)",
+        "authenticates and can read issues (write scopes can't be probed — PR mode needs Contents+PRs+Issues R/W)",
     };
   });
 
