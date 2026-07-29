@@ -19,6 +19,16 @@ and the logs say which case occurred: "Setting up sandbox (new
 container)" vs. "Reusing live sandbox (setup already done)". Found
 watching per-turn logs in the design lane during a real onboarding.
 
+## Spec links resolve in every mode (`feat/spec-link-push`)
+
+The spec writer posts a SHA-pinned `blob/<sha>` link on the issue, but the
+spec commit was pushed immediately only in PR mode. Non-PR issues merge
+locally (true merge, SHAs preserved) and only reach origin at the end of a
+successful run — never when the goal isn't met — so their spec links 404ed
+for the whole window, or forever for unmerged work. The branch is now
+pushed right after the spec step in every mode. Found clicking a dead
+spec link during a real onboarding.
+
 ## Lane preflight + sharper doctor (`feat/lane-preflight`)
 
 A contents-only fine-grained PAT in `.sandcastle/.env` authenticates fine
