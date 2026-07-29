@@ -90,7 +90,9 @@ load-bearing facts in words; the filer will ask what a screenshot shows.
 
 The conversation is anchored to the issue (id `design-issue-<n>`, anchor
 comment on the issue), and the designer starts from the issue body — it
-won't re-ask what the issue already answers.
+won't re-ask what the issue already answers. Dictate freely: the filed
+title is a mechanical summary of your report (full text in the body), and
+the designer retitles the issue concisely once it understands the feature.
 
 **The conversation (chat CLI):** one question per turn — arrow-keys for
 options or type a custom answer; proposals render as markdown with

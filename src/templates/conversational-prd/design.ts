@@ -23,6 +23,7 @@ import {
   commentOnIssue,
   findIssueByTitle,
   interpretPickerAnswer,
+  summarizeTitle,
   decomposeIssueTitle,
   linkSubIssue,
   numberFromUrl,
@@ -342,7 +343,7 @@ for (const summary of designerConversations) {
 const fileDesignIssue = (topic: string): number => {
   console.log(`\nFiling a design issue for: ${topic}`);
   const issueNumber = createIssue({
-    title: `PRD: ${topic}`,
+    title: `PRD: ${summarizeTitle(topic)}`,
     label: DESIGN_LABEL,
     body: `${AGENT_MARKER}\n\n${topic}\n\n_Filed via design.ts on behalf of the owner._`,
   });
