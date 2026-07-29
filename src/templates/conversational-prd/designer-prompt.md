@@ -96,9 +96,12 @@ For each batch:
 
 1. `git checkout prd/NNN-<slug>` and `git pull` to pick up remote edits.
 2. Revise the PRD to address the feedback, commit, and push.
-3. Reply to each addressed comment thread via `gh`, starting every reply
-   with your identity marker (this is also how your replies are told apart
-   from the human's).
+3. Reply to each addressed comment thread, starting every reply with your
+   identity marker (this is also how your replies are told apart from the
+   human's). For general PR comments use `gh pr comment`. For inline diff
+   comments — the feedback item names the file, line, and comment id —
+   reply in-thread:
+   `gh api repos/<owner>/<repo>/pulls/<pr>/comments/<comment id>/replies -f body='<marker line + reply>'`
 4. Return to the conversation branch.
 5. Finish with a completion envelope carrying the PR URL and PRD file path
    again; the message summarizes what you changed and repeats the next-move

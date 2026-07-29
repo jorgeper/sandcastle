@@ -24,6 +24,7 @@ import {
   commentOnIssue,
   findIssueByTitle,
   decomposeIssueTitle,
+  numberFromUrl,
   laneNudge,
 } from "./shared.ts";
 
@@ -199,6 +200,9 @@ process.on("SIGINT", () => {
     .then(() => process.exit(0));
 });
 
+const repoSlug = gh("repo view --json nameWithOwner -q .nameWithOwner").trim();
+const prNumber = numberFromUrl(prUrl);
+
 const feedbackStatePath = join(
   ".sandcastle",
   "conversations",
@@ -286,12 +290,45 @@ for (;;) {
   }
 
   const cutoff = readFeedbackState().lastProcessedAt;
-  const items = [...view.comments, ...view.reviews]
-    .map((c) => ({
+
+  // Inline review comments (comments on diff lines) live in the pulls API,
+  // NOT in `gh pr view --json comments,reviews` — a review submitted as
+  // "comment on a line" even has an empty review body. Fetch them too, with
+  // file/line context and the comment id so the designer can reply
+  // in-thread.
+  interface InlineComment {
+    id?: number;
+    user?: { login?: string };
+    body?: string;
+    created_at?: string;
+    path?: string;
+    line?: number | null;
+  }
+  let inline: InlineComment[] = [];
+  try {
+    inline = ghJson<InlineComment[]>(
+      `api repos/${repoSlug}/pulls/${prNumber}/comments`,
+    );
+  } catch {
+    // Best-effort — general comments still flow if the pulls API hiccups.
+  }
+
+  const items = [
+    ...[...view.comments, ...view.reviews].map((c) => ({
       author: c.author?.login ?? "unknown",
       body: (c.body ?? "").trim(),
       at: c.createdAt ?? c.submittedAt ?? "",
-    }))
+      context: "",
+    })),
+    ...inline.map((c) => ({
+      author: c.user?.login ?? "unknown",
+      body: (c.body ?? "").trim(),
+      at: c.created_at ?? "",
+      context: c.path
+        ? ` (inline on ${c.path}${c.line != null ? `:${c.line}` : ""}, comment id ${c.id})`
+        : "",
+    })),
+  ]
     .filter(
       (c) => c.body !== "" && !c.body.startsWith(AGENT_MARKER) && c.at > cutoff,
     )
@@ -299,7 +336,7 @@ for (;;) {
 
   if (items.length > 0) {
     const batch = items
-      .map((c) => `From @${c.author} at ${c.at}:\n${c.body}`)
+      .map((c) => `From @${c.author} at ${c.at}${c.context}:\n${c.body}`)
       .join("\n\n---\n\n");
     console.log(`\nSending ${items.length} feedback item(s) to the designer…`);
     const turn = await convo.send(`PR feedback:\n\n${batch}`);
