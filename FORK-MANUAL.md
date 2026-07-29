@@ -72,6 +72,11 @@ needs a PRD — release to implementers?"), but the choice is always yours:
 Ctrl-C anywhere is safe: the issue already exists; the conversation
 re-attaches; unlabeled means untouched.
 
+**Replies count, screenshots don't (yet):** agents read the issue's full
+comment thread, so replying to your own issue with more detail works. But
+image attachments may not be downloadable from the sandbox — put the
+load-bearing facts in words; the filer will ask what a screenshot shows.
+
 ## Lane 1 — Design (issue → PRD PR → merged PRD)
 
 **Start it, any of three ways:**

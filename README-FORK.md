@@ -6,6 +6,20 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Agents read the issue thread, not just the body (`feat/issue-thread-awareness`)
+
+Human replies on an issue (repro details, logs, screenshots added after
+filing) were invisible to two agents: the filer's prompt carries only a
+body snapshot and never told it to look further, and the goal template's
+spec writer fetched the issue with plain `gh issue view`, which drops
+comments. The filer now reads the full thread first
+(`gh issue view --comments`), and the spec writer fetches with
+`--comments`. Both prompts note that image attachments may not download
+from the sandbox — the filer asks what a load-bearing screenshot shows
+(without spending its question budget); actual image support is tracked
+as a follow-up issue. The designer already read the thread; the planner
+already received comment bodies in its issue list.
+
 ## Filer grounds lightly — locate, don't verify (`feat/filer-locate-dont-verify`)
 
 The filer prompt used to order "reproduce the claim against the code if
