@@ -83,13 +83,19 @@ it proposes **de-escalating**: the issue is relabeled `Sandcastle` and the
 conversation ends — no PRD, straight to the implementers.
 
 **The PR checkpoint:** after you approve the draft, the designer opens the
-PRD PR (`sandcastle:ready`, body `Closes #<design issue>`). Then:
+PRD PR (`sandcastle:ready`, body `Closes #<design issue>`) and the script
+moves on — **nothing polls**. `design.ts` is re-entrant like the main
+loop: every run first sweeps all PRD PRs (relays new comments — including
+inline diff comments — to their designers; merges approved ones and files
+the decompose issue), then offers remaining design issues, then exits
+listing exactly what's waiting on you. So:
 
-- **Want changes?** Comment on the PR. The watching script relays it; the
-  designer pushes revisions and replies (marker-prefixed).
-- **Happy?** `gh pr edit <pr> --add-label "sandcastle:approved"` — the
-  _script_ squash-merges (same gate as the main loop), which closes the
-  design issue and **auto-files the decompose issue**.
+- **Want changes?** Comment on the PR (top-level or inline), then re-run
+  `npm run sandcastle:design` — the sweep relays it and the designer
+  pushes revisions and replies (marker-prefixed).
+- **Happy?** `gh pr edit <pr> --add-label "sandcastle:approved"`, then
+  re-run — the sweep squash-merges (same gate as the main loop), closing
+  the design issue and **auto-filing the decompose issue**.
 
 ## Lane 2 — Decompose (merged PRD → implementation issues)
 
@@ -132,7 +138,7 @@ implementers run in goal mode, reviewer/merger land the work.
 | Start/resume a design          | `npm run sandcastle:design` (topic, `--issue <n>`, or picker)                                                    |
 | Answer an agent                | Chat CLI: arrows + enter, or type; **Approve** sends `APPROVED`                                                  |
 | Step away mid-conversation     | Ctrl-C — always safe; re-run the script to re-attach                                                             |
-| Revise a PRD under review      | Comment on the PRD PR; the watcher relays it                                                                     |
+| Revise a PRD under review      | Comment on the PRD PR (inline works too); next design run relays it                                              |
 | Approve any gated PR           | Add `sandcastle:approved` (script/orchestrator merges — you never merge)                                         |
 | Turn a merged PRD into issues  | `npm run sandcastle:decompose`; approve the tree in chat                                                         |
 | Build the backlog              | `npm run sandcastle`                                                                                             |

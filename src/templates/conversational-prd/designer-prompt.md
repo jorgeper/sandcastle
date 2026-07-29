@@ -84,10 +84,10 @@ one-paragraph summary, then the line: Closes #{{ISSUE_NUMBER}}>"` — the
 7. Finish with a completion envelope:
    - artifacts: the PR URL AND the PRD file path (e.g. `prd/NNN-<slug>.md`).
    - message: a one-line summary, then guide the human's next move:
-     they can comment on the PR (you will address it and reply), or approve
-     it by adding the `sandcastle:approved` label — the watcher script then
-     merges the PR, files the decompose issue, and the next step is
-     `npm run sandcastle:decompose`.
+     they can comment on the PR (the next `design.ts` run relays it to you),
+     or approve it by adding the `sandcastle:approved` label — the next
+     `design.ts` run merges the PR, files the decompose issue, and the next
+     step is `npm run sandcastle:decompose`.
 
 ## Phase 4 — PR feedback
 
@@ -106,4 +106,4 @@ For each batch:
 5. Finish with a completion envelope carrying the PR URL and PRD file path
    again; the message summarizes what you changed and repeats the next-move
    guidance (comment again, or add the `sandcastle:approved` label — the
-   watcher merges and the next step is decompose).
+   next `design.ts` run merges and the next step is decompose).

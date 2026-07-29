@@ -82,10 +82,24 @@ unchanged.
   (`ISSUE_NUMBER`, plus the issue body fetched host-side); the grilling
   starts from what the issue already says instead of a blank topic.
 
-**PRD PR:** unchanged (branch `prd/NNN-<slug>`, `sandcastle:ready` label,
-label-gated script merge) with one addition — the PR body contains
-`Closes #<design issue>`, so the merge that lands the PRD also closes the
-design issue. No state label needed.
+**PRD PR:** branch `prd/NNN-<slug>`, `sandcastle:ready` label, label-gated
+script merge, and the PR body contains `Closes #<design issue>`, so the
+merge that lands the PRD also closes the design issue. No state label
+needed.
+
+**Re-entrant, no resident process (supersedes prd/004's polling watcher):**
+`design.ts` works like the main loop — each run classifies GitHub state,
+does everything actionable, and exits with what's waiting on the human:
+
+1. **Sweep** every design conversation that has a PRD PR: merge approved
+   PRs (+ file the handoff issue), relay new PR comments (including inline
+   diff comments) to the designer — mechanical work, no human needed.
+2. **Converse**: offer the open design issues that still need a
+   conversation, one after another, until the human stops or none remain.
+3. **Exit** with the "waiting on you" list (PRs to review/approve, next
+   commands). Advancing the lane = acting on GitHub and re-running the
+   script — which is also exactly the shape a Telegram gateway can trigger
+   per command, with no process to babysit.
 
 **Handoff (script-side, at merge):** immediately after the approval merge,
 `design.ts` creates the follow-up issue:
