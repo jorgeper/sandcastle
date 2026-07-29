@@ -6,6 +6,21 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Image-gap nudge (`feat/image-gap-nudge`)
+
+Installs inside a sandbox die with the container — an implementer that
+needs Playwright re-downloads the browsers in every new sandbox, and
+goal-mode attempts burn turn budget on setup. Nothing detected this
+except a human watching `tail -f`. Now (prd/006, issue #9): the main
+loop's run end scans this run's logs for a fixed install-signature list
+(playwright install, apt/apk/dnf/yum, `npm i -g` — never worktree
+`npm install`), tallies repeats across runs in
+`.sandcastle/install-tally.json` keyed to the image id (rebuild = fix =
+tally reset), and prints one line per install naming the Dockerfile fix.
+The doctor shows the same tally as an "image gaps" check. Pure
+detection/tally/format functions ship with unit tests
+(`install-scan.test.mts`). Nudge, never a gate.
+
 ## Fix: the implementer-circles-forever bug (`fix/reviewer-built-in-arg`)
 
 An issue kept getting re-planned and re-implemented across loop
