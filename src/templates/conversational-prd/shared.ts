@@ -176,6 +176,28 @@ export const laneNudge = (
 // CLI helpers
 // ---------------------------------------------------------------------------
 
+/** What a picker answer means: nothing → finish, an in-range number → that
+ * candidate (0-based), anything else → a new topic to file. Only pure
+ * integers count as picks, so out-of-range or decimal input becomes a topic
+ * rather than a silent exit. */
+export type PickerAction =
+  | { kind: "finish" }
+  | { kind: "pick"; index: number }
+  | { kind: "topic"; topic: string };
+
+export const interpretPickerAnswer = (
+  answer: string,
+  candidateCount: number,
+): PickerAction => {
+  const trimmed = answer.trim();
+  if (trimmed === "") return { kind: "finish" };
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number.parseInt(trimmed, 10);
+    if (n >= 1 && n <= candidateCount) return { kind: "pick", index: n - 1 };
+  }
+  return { kind: "topic", topic: trimmed };
+};
+
 export const ask = async (question: string): Promise<string> => {
   const rl = readline.createInterface({
     input: process.stdin,
