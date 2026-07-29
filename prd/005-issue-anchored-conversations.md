@@ -112,8 +112,28 @@ Symmetric:
    closes the decompose issue with a marker-annotated comment listing the
    created issue tree. Closing is mechanical, so it stays out of the agent.
 
-Stage 3 (main loop) is untouched: it picks up labeled implementation
-issues exactly as today.
+Stage 3 (main loop) picks up labeled implementation issues exactly as
+today.
+
+## Cross-stage visibility (nudges, not orchestration)
+
+Every entry point reports the state of the other lanes, so the human
+always sees the whole pipeline from wherever they are:
+
+- `npm run sandcastle` (main loop): before planning, a host-side check
+  lists open `sandcastle:design` / `sandcastle:decompose` issues and
+  prints a notice — "2 design issue(s) await a conversation: #41, #52 —
+  run `npx tsx .sandcastle/design.ts`" (same for decompose). The loop
+  **never blocks on or drives these issues** — they need the human
+  present; it only points at the right script.
+- `design.ts` / `decompose.ts`: after their own picker, a one-line note
+  when implementation issues are labeled and waiting — "3 implementation
+  issue(s) ready — `npm run sandcastle` when you want them built."
+
+This is a convention-level coupling only (label names + a printed
+suggestion), not shared code — ADR 0009 holds. The notice degrades
+gracefully: if the conversational scripts aren't scaffolded in a repo, it
+names the label and template instead of the script.
 
 ## Traceability chain
 
@@ -160,9 +180,10 @@ resume) is prd/004 machinery and is unchanged.
   `Closes #`, and the `**PRD:**` parsing; prompts reference
   `{{ISSUE_NUMBER}}`.
 - Pure-function tests for the host-side helpers the scripts gain (PRD-line
-  parsing, decompose-issue title derivation, anchor-comment detection) —
-  extracted into small exported functions within the template files so
-  they stay self-contained (ADR 0009) but testable.
+  parsing, decompose-issue title derivation, anchor-comment detection,
+  visibility-notice formatting) — extracted into small exported functions
+  within the template files so they stay self-contained (ADR 0009) but
+  testable.
 - Conversation-library behavior is unchanged — no new library tests.
 
 ## Documentation
@@ -185,4 +206,6 @@ resume) is prd/004 machinery and is unchanged.
 - A triage agent that labels unlabeled issues.
 - Unresolved-review-threads gate on the PRD PR (tracked as the remaining
   Option B asymmetry from the approval-gate discussion).
-- Changes to the main-loop templates or the conversation library.
+- Changes to the conversation library. Main-loop template changes are
+  limited to the pre-planning visibility notice above — no routing or
+  blocking behavior.
