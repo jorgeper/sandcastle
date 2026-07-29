@@ -119,6 +119,11 @@ describe("conversational-prd template", () => {
     expect(decomposer).toContain("sub_issues");
     expect(filer).toContain("{{ISSUE_NUMBER}}");
     expect(filer).toContain("sandcastle:design");
+    // The prompt only carries the body snapshot; replies (screenshots, logs)
+    // live in the thread, so the filer must read it — and image attachments
+    // may not resolve from the sandbox, so it asks what a screenshot shows.
+    expect(filer).toContain("gh issue view {{ISSUE_NUMBER}} --comments");
+    expect(filer).toContain("ask the human what it shows");
     // Grounding is a light survey, not debugging: the filer locates likely
     // code, it never reproduces or diagnoses — the implement lane owns that.
     expect(filer).toContain("Locate, don't verify");

@@ -1340,6 +1340,9 @@ describe("InitService scaffold", () => {
       );
       // Structured output: run() validates the opening tag appears literally.
       expect(prompt).toContain("<spec>");
+      // The issue thread carries human replies (repro details, screenshots) —
+      // plain `gh issue view` drops comments, so the flag is load-bearing.
+      expect(prompt).toContain("gh issue view {{TASK_ID}} --comments");
       // Idempotency: existing spec file on branch → recover, not regenerate.
       expect(prompt).toContain("IDEMPOTENCY CHECK");
       expect(prompt).toContain("**Spec:**");

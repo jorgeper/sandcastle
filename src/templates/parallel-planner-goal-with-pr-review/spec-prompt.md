@@ -16,7 +16,10 @@ straight to OUTPUT.
 
 # WRITE THE SPEC
 
-Otherwise, gather context: the issue (`gh issue view {{TASK_ID}}`), any
+Otherwise, gather context: the issue INCLUDING its comment thread
+(`gh issue view {{TASK_ID}} --comments` — human replies often carry repro
+details or screenshots; image attachments may not download from the
+sandbox, so rely on the reply text), any
 `**PRD:**` file it references, and any `**Parent:** #<ID>` issue. Explore
 the repo enough to make the acceptance criteria concrete.
 
