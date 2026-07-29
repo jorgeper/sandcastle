@@ -19,6 +19,21 @@ and the logs say which case occurred: "Setting up sandbox (new
 container)" vs. "Reusing live sandbox (setup already done)". Found
 watching per-turn logs in the design lane during a real onboarding.
 
+## Lane preflight + sharper doctor (`feat/lane-preflight`)
+
+A contents-only fine-grained PAT in `.sandcastle/.env` authenticates fine
+(`gh api user` passes — which is all the doctor probed) but 404s on issue
+operations, so the designer discovered it mid-conversation and burned a
+96-second turn diagnosing credentials. Now: `design.ts`/`decompose.ts`
+preflight at startup and `issue.ts` before developing (capture stays
+instant) — checking `.env` presence, agent credential, and whether
+GH_TOKEN can read the repo's issues. Problems are a nudge, not a gate:
+list what's wrong, point at `npm run sandcastle:doctor`, ask whether to
+continue. The goal template's doctor gained the same issue-access probe
+with a concrete fix hint (regenerate with Contents + Issues + Pull
+requests R/W). Found when the designer hit exactly this during a real
+onboarding.
+
 ## Summarized titles for raw reports (`feat/design-title-summary`)
 
 Filing a design topic put the entire dictated paragraph into the issue

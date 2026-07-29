@@ -63,6 +63,36 @@ describe("conversational-prd template", () => {
     expect(filingSites.length).toBeGreaterThanOrEqual(3);
   });
 
+  it("lanes preflight the environment and point at the doctor", async () => {
+    const dir = await makeDir();
+    await runScaffold(dir);
+    const shared = await readFile(
+      join(dir, ".sandcastle", "shared.ts"),
+      "utf-8",
+    );
+    const design = await readFile(
+      join(dir, ".sandcastle", "design.ts"),
+      "utf-8",
+    );
+    const decompose = await readFile(
+      join(dir, ".sandcastle", "decompose.ts"),
+      "utf-8",
+    );
+    const issue = await readFile(join(dir, ".sandcastle", "issue.ts"), "utf-8");
+    // The probe that catches a contents-only PAT: authenticates fine but
+    // cannot read issues, which strands the agent mid-conversation.
+    expect(shared).toContain("preflight");
+    expect(shared).toContain("issues?per_page=1");
+    // Nudge, not a gate: point at the doctor, let the human decide.
+    expect(shared).toContain("sandcastle:doctor");
+    expect(shared).toContain("Continue anyway?");
+    // Design and decompose always run an agent — preflight at start. The
+    // filer preflights only when developing: capture must stay instant.
+    expect(design).toContain("await preflight()");
+    expect(decompose).toContain("await preflight()");
+    expect(issue).toContain("await preflight()");
+  });
+
   it("raw reports become summarized titles, refined later by the agents", async () => {
     const dir = await makeDir();
     await runScaffold(dir);

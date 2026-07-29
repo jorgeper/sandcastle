@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as readline from "node:readline/promises";
@@ -227,3 +227,77 @@ export const ask = async (question: string): Promise<string> => {
 
 export const sleep = (seconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+
+// ---------------------------------------------------------------------------
+// Preflight — nudge, not a gate
+// ---------------------------------------------------------------------------
+
+/** Minimal KEY=VALUE parser for .sandcastle/.env (quotes stripped). */
+const parseEnv = (content: string): Record<string, string> => {
+  const vars: Record<string, string> = {};
+  for (const line of content.split("\n")) {
+    const match = line.match(
+      /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/,
+    );
+    if (match) vars[match[1]!] = match[2]!.replace(/^["']|["']$/g, "");
+  }
+  return vars;
+};
+
+/** Check the pieces a conversational lane needs BEFORE burning an agent turn
+ * on a misconfigured environment: .sandcastle/.env with an agent credential,
+ * and a GH_TOKEN the sandboxed agent can actually use for issue operations.
+ * The killer case: a contents-only fine-grained PAT authenticates fine but
+ * 404s on issues, so the agent discovers it mid-conversation and wastes the
+ * turn diagnosing credentials. Problems are a nudge, not a gate — you see
+ * what's wrong, get pointed at `npm run sandcastle:doctor` (which explains
+ * the fixes), and choose whether to continue. */
+export const preflight = async (): Promise<void> => {
+  const problems: string[] = [];
+  const envUrl = new URL("./.env", import.meta.url);
+  if (!existsSync(envUrl)) {
+    problems.push(
+      ".sandcastle/.env is missing — sandboxed agents have no credentials",
+    );
+  } else {
+    const envVars = parseEnv(readFileSync(envUrl, "utf8"));
+    if (!envVars.CLAUDE_CODE_OAUTH_TOKEN && !envVars.ANTHROPIC_API_KEY) {
+      problems.push(
+        "no CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in .sandcastle/.env",
+      );
+    }
+    if (!envVars.GH_TOKEN) {
+      problems.push(
+        "no GH_TOKEN in .sandcastle/.env — sandboxed agents can't reach GitHub",
+      );
+    } else {
+      try {
+        const slug = gh(
+          "repo view --json nameWithOwner -q .nameWithOwner",
+        ).trim();
+        execSync(`gh api "repos/${slug}/issues?per_page=1" --silent`, {
+          env: {
+            ...process.env,
+            GH_TOKEN: envVars.GH_TOKEN,
+            GITHUB_TOKEN: envVars.GH_TOKEN,
+          },
+          stdio: "pipe",
+        });
+      } catch {
+        problems.push(
+          "GH_TOKEN in .sandcastle/.env cannot read this repo's issues — " +
+            "sandboxed agents will fail on issue/PR operations " +
+            "(the token needs Contents + Issues + Pull requests R/W)",
+        );
+      }
+    }
+  }
+  if (problems.length === 0) return;
+  console.log("\n⚠ Preflight found problems with this environment:");
+  for (const problem of problems) console.log(`  ✗ ${problem}`);
+  console.log(
+    "\nRun `npm run sandcastle:doctor` for a full check-up with fix instructions.",
+  );
+  const answer = await ask("Continue anyway? (y/N): ");
+  if (!answer.toLowerCase().startsWith("y")) process.exit(1);
+};

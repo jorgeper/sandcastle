@@ -27,6 +27,7 @@ import {
   decomposeIssueTitle,
   linkSubIssue,
   numberFromUrl,
+  preflight,
   pullFastForward,
   laneNudge,
 } from "./shared.ts";
@@ -53,6 +54,7 @@ const sandbox = docker();
 const AGENT_MARKER = markerFor("designer");
 const ANCHOR_TEXT = "Designer conversation started";
 
+await preflight();
 ensureLabel(DESIGN_LABEL, "Needs a PRD; grill the owner");
 const repoSlug = gh("repo view --json nameWithOwner -q .nameWithOwner").trim();
 
