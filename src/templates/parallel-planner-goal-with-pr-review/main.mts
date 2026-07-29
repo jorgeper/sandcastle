@@ -38,7 +38,7 @@
 //   npx tsx .sandcastle/main.mts --doctor     check env/auth/docker/labels
 //   npx tsx .sandcastle/main.mts --help       show usage
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as sandcastle from "@ai-hero/sandcastle";
@@ -369,8 +369,51 @@ const runDebate = async (
 };
 
 // ---------------------------------------------------------------------------
+// Conversational-lane visibility — a nudge, never orchestration. Issues
+// routed to the design/decompose lanes need the human present for a
+// conversation, so this loop only points at them (convention-level
+// coupling: label names + a suggestion; no shared code — ADR 0009).
+// ---------------------------------------------------------------------------
+
+const nudgeConversationalLanes = async (): Promise<void> => {
+  const lanes = [
+    { label: "sandcastle:design", script: ".sandcastle/design.ts" },
+    { label: "sandcastle:decompose", script: ".sandcastle/decompose.ts" },
+  ];
+  for (const lane of lanes) {
+    try {
+      const { stdout } = await execFileAsync("gh", [
+        "issue",
+        "list",
+        "--state",
+        "open",
+        "--label",
+        lane.label,
+        "--json",
+        "number",
+        "--limit",
+        "20",
+      ]);
+      const issues = JSON.parse(stdout) as Array<{ number: number }>;
+      if (issues.length === 0) continue;
+      const list = issues.map((i) => `#${i.number}`).join(", ");
+      const how = existsSync(lane.script)
+        ? `npx tsx ${lane.script}`
+        : `the ${lane.label} lane (conversational-prd template)`;
+      console.log(
+        `ℹ ${issues.length} ${lane.label} issue(s) await a conversation (${list}) — run ${how} to tackle them separately.`,
+      );
+    } catch {
+      // Nudges are best-effort; never block the loop on them.
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
+
+await nudgeConversationalLanes();
 
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
@@ -685,10 +728,17 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
           `Implemented over ${implement.commits.length} commit(s); see the commit history for details.`,
         ].join("\n");
 
+        // Guarantee the PR ↔ issue link regardless of what the pr-writer
+        // produced — the closing keyword is what ties the chain together.
+        const closesLine = new RegExp(`(Closes|Fixes|Resolves) #${issue.id}\\b`).test(
+          body,
+        )
+          ? ""
+          : `\n\nCloses #${issue.id}`;
         const prNumber = await github.createPr({
           branch: issue.branch,
           title,
-          body: `${markerFor("implementer", "claude-code", implementerModel)} opened this PR.\n\n${body}`,
+          body: `${markerFor("implementer", "claude-code", implementerModel)} opened this PR.\n\n${body}${closesLine}`,
         });
         console.log(`  #${issue.id}: opened PR #${prNumber}`);
         await runDebate(sandbox, prNumber, issue.branch, "pr-reviewer");

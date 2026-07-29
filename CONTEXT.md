@@ -182,6 +182,10 @@ _Avoid_: "conversation log" (that's the agent log file), "history", "database"
 A renderer/input adapter over a **conversation** — the Ink chat TUI (`@ai-hero/sandcastle/chat`) today; a Telegram daemon later. Frontends hold no state: everything they display is replayed from the **conversation store**.
 _Avoid_: "gateway" (the transport-agnostic conversation layer as a whole, not one renderer), "UI client", "interface"
 
+**Routing label**:
+An issue-tracker label that routes a **task** to a pipeline lane and its agent (`sandcastle:design` → designer **conversation**, `sandcastle:decompose` → decomposer **conversation**, `Sandcastle` → implementer loop). Routing labels carry intent, never progress — state lives in GitHub-native signals (issue open/closed, PR merged, `Closes #N`).
+_Avoid_: "state label", "status label", "workflow label"
+
 ### Hooks
 
 **Host hook**:

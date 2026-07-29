@@ -6,6 +6,40 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Issue-anchored lanes: filer agent + label routing (`feat/issue-anchored-conversations`)
+
+Makes the GitHub issue the universal work item across the whole pipeline
+(spec: `prd/005-issue-anchored-conversations.md`). Every stage starts from
+an issue carrying a routing label — created by the human or auto-filed by
+the scripts — and every path prints the human's next step.
+
+**What was added**
+
+- Routing labels (registered in `docs/agents/triage.md`, term in
+  CONTEXT.md): `sandcastle:design` → designer, `sandcastle:decompose` →
+  decomposer, `Sandcastle` → main loop. Routing only — no state labels;
+  GitHub-native state (open/closed, merged, `Closes #N`) carries progress.
+- New filer lane: `issue.ts` + `filer-prompt.md` — a short-leash
+  conversation (≤2–3 questions, repo-grounded) that turns a report into a
+  well-formed issue routed implement / needs-a-PRD / hold. Escalation is a
+  label, not an agent handoff; the designer has the symmetric
+  de-escalation (relabel to `Sandcastle`, no PRD).
+- `design.ts`: resolves a design issue (picker / `--issue` / auto-file
+  from a topic), anchors the conversation to it (id `design-issue-<n>`,
+  marker-annotated anchor + PR comments), PRD PR carries
+  `Closes #<issue>`, and the approval merge files the decompose handoff
+  issue (idempotent by deterministic title). `decompose.ts`: symmetric
+  pickup, PRD path parsed from the `**PRD:**` line, script closes the
+  tracking issue with the created tree.
+- Template-internal `shared.ts` (markers, labels, `gh` wrappers with
+  `--body-file` quoting, pure helpers) — shared within the template only,
+  ADR 0009 intact; pure helpers unit-tested from outside the template dir.
+- Goal-template main loop: best-effort pre-loop nudge listing open
+  design/decompose issues awaiting a conversation — points at the scripts,
+  never drives them.
+- `FORK-MANUAL.md`: the operator's guide (one inbox, four lanes, every
+  touchpoint), linked from the README fork notice.
+
 ## Conversation gateway: designer & decomposer agents (`feat/conversation-gateway`)
 
 Adds a way to _talk to_ sandboxed agents instead of driving Claude Code's
