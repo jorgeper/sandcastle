@@ -6,6 +6,18 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Filer grounds lightly — locate, don't verify (`feat/filer-locate-dont-verify`)
+
+The filer prompt used to order "reproduce the claim against the code if
+cheap" and require `path:line` pointers in every rewritten body, sending
+the agent into open-ended code investigation before the first question —
+duplicating debugging the implement lane redoes anyway (found onboarding a
+real repo). Grounding is now a budgeted quick survey: locate likely files,
+search for duplicate issues, never run code or attempt to reproduce or
+diagnose; code pointers are best-effort fallout of the survey, never a
+hunt. The filer lane stays what it's for: clarifying the issue, not
+solving it.
+
 ## Design picker accepts free text (`feat/design-picker-free-text`)
 
 The bare-run `design.ts` picker is now symmetrical with `issue.ts`: type a
