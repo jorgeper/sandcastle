@@ -40,6 +40,10 @@ Boundaries (from the design discussion):
 - The fast path stays fast: `design.ts "some idea"` auto-creates the
   issue. Issue-first is a property of the system, not ceremony for the
   human.
+- **Every path guides the next step.** Each script's exit (and each agent's
+  `done` envelope) tells the human exactly what they can do next — the
+  command to run, the label to add, the PR to look at. Nothing ends with
+  silence.
 
 ## Label taxonomy
 
@@ -115,6 +119,39 @@ Symmetric:
 Stage 3 (main loop) picks up labeled implementation issues exactly as
 today.
 
+## Filer flow (`issue.ts`) — the lane for everything smaller than a PRD
+
+A third conversational role with a deliberately short leash: turn a
+two-line report into a well-formed, correctly routed issue.
+
+1. `issue.ts "search is slow on big repos"` (or no args → prompt). No
+   issue-anchoring on entry — the issue is this lane's **output**.
+   Conversation id: `file-<slug>`, role `filer`.
+2. The filer asks **at most 2–3 clarifying questions, and only if the
+   report is ambiguous** (repro, expected vs. actual, acceptance
+   criteria). A clear report goes straight to the proposal. It grounds
+   the issue in the repo: likely files, related issues, concrete
+   acceptance criteria.
+3. The proposal shows the complete issue (title, body with marker first
+   line, label) **plus the routing recommendation** as options,
+   recommendation first:
+   - `Sandcastle` — contained bug/task, implementer-ready (the default);
+   - `sandcastle:design` — this smells bigger than a bug; file it into
+     the design lane instead (**escalation is a label, not a mid-flight
+     agent handoff** — the issue is the baton, and the designer later
+     starts warm from everything the filer wrote into the body);
+   - hold — create unlabeled (backlog; release later by adding the
+     label).
+4. On `APPROVED`: create the issue, `done` with the URL and next-step
+   guidance keyed to the label (design → run `design.ts`; `Sandcastle` →
+   `npm run sandcastle`; hold → how to release).
+
+**De-escalation (designer prompt note):** the symmetric misjudgment — a
+design conversation that quickly concludes "this is just a bug" — is
+handled the same way: the designer proposes relabeling the issue to
+`Sandcastle` (dropping `sandcastle:design`) and ends its conversation.
+Same baton, opposite direction. No PRD is written.
+
 ## Cross-stage visibility (nudges, not orchestration)
 
 Every entry point reports the state of the other lanes, so the human
@@ -176,9 +213,11 @@ resume) is prd/004 machinery and is unchanged.
 
 ## Testing
 
-- Template structure test additions: scripts reference the routing labels,
-  `Closes #`, and the `**PRD:**` parsing; prompts reference
-  `{{ISSUE_NUMBER}}`.
+- Template structure test additions: the template gains `issue.ts`,
+  `filer-prompt.md`, and a `shared.ts` (pure helpers shared _within_ the
+  template — ADR 0009 forbids sharing across templates, not within one);
+  scripts reference the routing labels, `Closes #`, and the `**PRD:**`
+  parsing; prompts reference `{{ISSUE_NUMBER}}`.
 - Pure-function tests for the host-side helpers the scripts gain (PRD-line
   parsing, decompose-issue title derivation, anchor-comment detection,
   visibility-notice formatting) — extracted into small exported functions
