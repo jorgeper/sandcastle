@@ -59,6 +59,11 @@ Rules for the goal statement and acceptance criteria:
   implementer exists on issue #{{TASK_ID}}.
 - Keep the goal statement under 1,500 characters; detail belongs in the
   acceptance criteria, which the file carries.
+- Any command the goal or criteria reference MUST exist: check
+  package.json `scripts` and name the real ones (e.g. `npm run test:unit`,
+  not an assumed `npm run test`). A goal referencing a nonexistent command
+  is unsatisfiable as written — the judge can't verify it and the
+  implementer wastes attempts arguing equivalence.
 
 # COMMIT
 

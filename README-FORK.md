@@ -6,6 +6,23 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Fix: the implementer-circles-forever bug (`fix/reviewer-built-in-arg`)
+
+An issue kept getting re-planned and re-implemented across loop
+iterations even after the agent completed it — three template defects
+behind one symptom, found tracing a real repo's logs (no reviewer or
+merger log ever appeared). (1) The reviewer and conflict-resolver runs
+passed `TARGET_BRANCH` via `promptArgs`; it's a reserved built-in, so
+the run threw a PromptError before writing a log line, rejecting the
+dispatch right after a successful implement. (2) `TARGET_BRANCH` was
+hardcoded `"master"` — on a `main`-based repo the merge phase's
+branch-ahead re-entrancy check was always false, stranding implemented
+branches forever; now derived from the branch the loop runs on. (3) The
+spec writer could reference nonexistent commands (`npm run test` in a
+repo with only `test:unit`/`test:e2e`), making the goal unsatisfiable
+as written; the spec prompt now requires verifying script names against
+package.json.
+
 ## Uncommitted-scaffold detection (`feat/scaffold-committed-check`)
 
 Sandbox worktrees branch from committed history, so an uncommitted
