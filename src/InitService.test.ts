@@ -1389,6 +1389,29 @@ describe("InitService scaffold", () => {
       expect(setup).toContain("regenerate the token");
     });
 
+    it("doctor and main loop detect an uncommitted implementer skill", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const setup = await readFile(
+        join(dir, ".sandcastle", "setup.mts"),
+        "utf-8",
+      );
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      // Sandbox worktrees branch from committed history: init says "commit
+      // it" once and an uncommitted skill fails silently (implementers run
+      // with no process rules). The doctor checks committed-ness and the
+      // main loop nudges at startup — nudge, not a gate.
+      expect(setup).toContain("cat-file");
+      expect(setup).toContain("git add .claude .sandcastle");
+      expect(mainTs).toContain("cat-file");
+      expect(mainTs).toContain("without process rules");
+    });
+
     it("main.mts exposes the spec dir and goal knobs in the configuration block", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {

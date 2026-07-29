@@ -122,7 +122,8 @@ branch from your committed `main`, so an uncommitted skill file means the
 goal-mode implementer runs with **no process rules** — unmarked comments,
 no single-comment discipline, no prior-attempt awareness. The scaffolded
 `.sandcastle/.gitignore` already excludes `.env`, logs, and worktrees, so
-committing the directory is safe.
+committing the directory is safe. (The doctor checks this, and
+`npm run sandcastle` warns at startup if the skill isn't committed.)
 
 **7. Dockerfile = toolchain.** Before (or after — rebuild any time with
 `npx sandcastle docker build-image`) the image build, bake in what agents

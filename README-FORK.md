@@ -6,6 +6,20 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Uncommitted-scaffold detection (`feat/scaffold-committed-check`)
+
+Sandbox worktrees branch from committed history, so an uncommitted
+`.claude/skills/sandcastle-implementer/SKILL.md` silently strips
+goal-mode implementers of their process rules — unmarked comments, no
+single-comment discipline, no prior-attempt awareness. Init said "commit
+it" once and nothing ever checked again. The doctor now has an
+"implementer skill committed" check (`git cat-file -e HEAD:<path>`,
+distinguishing exists-but-uncommitted from missing, with the exact fix
+commands), and the main loop warns at startup — a nudge, never a gate.
+Found when an implementer posted an unmarked mid-work "Implemented"
+comment during a real onboarding; companion to the manual's new
+"Onboarding a repo" step 6.
+
 ## Spec links resolve in every mode (`feat/spec-link-push`)
 
 The spec writer posts a SHA-pinned `blob/<sha>` link on the issue, but the

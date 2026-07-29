@@ -409,10 +409,26 @@ const nudgeConversationalLanes = async (): Promise<void> => {
   }
 };
 
+// Nudge, not a gate: sandbox worktrees branch from committed history, so an
+// uncommitted implementer skill means goal-mode implementers run without
+// process rules — and it fails silently. Warn at startup, keep running.
+const warnUncommittedSkill = async (): Promise<void> => {
+  const skillPath = ".claude/skills/sandcastle-implementer/SKILL.md";
+  try {
+    await execFileAsync("git", ["cat-file", "-e", `HEAD:${skillPath}`]);
+  } catch {
+    console.warn(
+      `⚠ ${skillPath} is not committed — implementers will run without process rules.\n` +
+        `  Fix: git add .claude .sandcastle && git commit && git push (details: npm run sandcastle:doctor)`,
+    );
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
 
+await warnUncommittedSkill();
 await nudgeConversationalLanes();
 
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
