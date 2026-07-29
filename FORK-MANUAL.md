@@ -41,7 +41,7 @@ enforced by the orchestrator even if the pr-writer forgets). Expand the
 design issue in GitHub's issue list and the entire feature unfolds under
 it. Nothing exists without an issue that says why.
 
-## Lane 0 — File (a report → a well-routed issue)
+## Lane 0 — File (capture first, enrich optionally)
 
 The lane for everything smaller than a PRD — and the router for everything
 else.
@@ -50,19 +50,27 @@ else.
 npm run sandcastle:issue -- "search is slow on big repos"
 ```
 
-The filer investigates the repo first (likely files, related issues), asks
-**at most 2–3 questions** and only if your report is ambiguous, then
-proposes the complete issue: title, body with code pointers and acceptance
-criteria, and a **routing recommendation**:
+**Capture is instant** (no agent): the issue is filed immediately — your
+words, marker, **unlabeled = on hold**, invisible to the agents. Hit Enter
+at the "Develop it now?" prompt and you're done — that's the quick issue;
+there is no separate quick workflow. Fire-and-forget from anywhere
+(this is the Telegram one-liner).
 
-- `Sandcastle` — implementer-ready; the main loop will pick it up.
-- `sandcastle:design` — smells bigger than a bug; route it to the design
-  lane (**escalation is a label, not a handoff** — the designer later
-  starts warm from everything the filer wrote into the issue).
-- Hold — file unlabeled; release later by adding a label.
+**Develop it** (now with `y`, or any time later — `npm run sandcastle:issue`
+with no args lists all held issues): a short conversation grounds the
+issue in the repo, asks at most 2–3 questions if needed, rewrites the body
+(code pointers, acceptance criteria) for your approval, and then **always
+asks how to route it** — with the filer's recommendation, both ways
+("I think this needs a PRD — route to design?" / "I don't think this
+needs a PRD — release to implementers?"), but the choice is always yours:
 
-Approve, and it files the issue and tells you the next command for
-wherever it was routed.
+- `Sandcastle` — release to the implementers (main loop picks it up).
+- `sandcastle:design` — route to the design lane; the designer starts warm
+  from the enriched body (**escalation is a label, not a handoff**).
+- Hold — stays unlabeled on the backlog.
+
+Ctrl-C anywhere is safe: the issue already exists; the conversation
+re-attaches; unlabeled means untouched.
 
 ## Lane 1 — Design (issue → PRD PR → merged PRD)
 

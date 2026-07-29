@@ -98,8 +98,11 @@ describe("conversational-prd template", () => {
     expect(decomposer).toContain("{{PRD_FILE}}");
     expect(decomposer).toContain("{{ISSUE_NUMBER}}");
     expect(decomposer).toContain("sub_issues");
-    expect(filer).toContain("{{REPORT}}");
+    expect(filer).toContain("{{ISSUE_NUMBER}}");
     expect(filer).toContain("sandcastle:design");
+    // Routing is always the human's call, in both directions.
+    expect(filer).toContain("ALWAYS ask, never assume");
+    expect(filer).toContain("Create a PRD anyway");
     // Everything agents write on GitHub is attributed via the
     // [agent · harness · model] marker the scripts pass in.
     for (const prompt of [designer, decomposer, filer]) {

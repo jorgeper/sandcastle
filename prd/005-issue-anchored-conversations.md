@@ -133,32 +133,35 @@ Symmetric:
 Stage 3 (main loop) picks up labeled implementation issues exactly as
 today.
 
-## Filer flow (`issue.ts`) — the lane for everything smaller than a PRD
+## Filer flow (`issue.ts`) — capture first, enrich optionally
 
-A third conversational role with a deliberately short leash: turn a
-two-line report into a well-formed, correctly routed issue.
+The lane for everything smaller than a PRD, and the router for everything
+else. Two-phase, so quick capture costs seconds:
 
-1. `issue.ts "search is slow on big repos"` (or no args → prompt). No
-   issue-anchoring on entry — the issue is this lane's **output**.
-   Conversation id: `issue-<slug>`, role `filer`.
-2. The filer asks **at most 2–3 clarifying questions, and only if the
-   report is ambiguous** (repro, expected vs. actual, acceptance
-   criteria). A clear report goes straight to the proposal. It grounds
-   the issue in the repo: likely files, related issues, concrete
-   acceptance criteria.
-3. The proposal shows the complete issue (title, body with marker first
-   line, label) **plus the routing recommendation** as options,
-   recommendation first:
-   - `Sandcastle` — contained bug/task, implementer-ready (the default);
-   - `sandcastle:design` — this smells bigger than a bug; file it into
-     the design lane instead (**escalation is a label, not a mid-flight
-     agent handoff** — the issue is the baton, and the designer later
-     starts warm from everything the filer wrote into the body);
-   - hold — create unlabeled (backlog; release later by adding the
-     label).
-4. On `APPROVED`: create the issue, `done` with the URL and next-step
-   guidance keyed to the label (design → run `design.ts`; `Sandcastle` →
-   `npm run sandcastle`; hold → how to release).
+1. **Capture (script-side, instant, no agent):**
+   `issue.ts "search is slow on big repos"` files the issue immediately —
+   raw text, marker, **unlabeled** (= on hold, invisible to the agents).
+   This is the fire-and-forget path (and the Telegram one-liner): decline
+   the develop step and you're done. There is no separate "quick issue"
+   workflow — quick capture IS the default, and Ctrl-C mid-development
+   leaves exactly the same safe state (issue exists, unlabeled).
+2. **Develop (optional, now or any time later):** a short-leash
+   conversation anchored `issue-<n>`, role `filer`. It grounds the issue
+   in the repo (likely files, related issues), asks **at most 2–3
+   questions and only if the report is ambiguous**, then proposes the
+   rewritten issue body (acceptance criteria, code pointers); on
+   `APPROVED` it edits the issue in place.
+3. **Routing — always asked, never assumed.** The final question carries
+   the filer's recommendation with a one-line justification, in both
+   directions ("I think this needs a PRD — route to design?" / "I don't
+   think this needs a PRD — release to implementers?"), but all three
+   options are always offered: `Sandcastle` (release), `sandcastle:design`
+   (escalate — the label, not a mid-flight agent handoff; the designer
+   later starts warm from the enriched body), or hold. The human's choice
+   is applied verbatim.
+4. `issue.ts` with no args lists **held issues** (open, no routing label —
+   derivable state, no draft label needed) to develop, or takes a new
+   report. Every exit prints the next step keyed to the routing.
 
 **De-escalation (designer prompt note):** the symmetric misjudgment — a
 design conversation that quickly concludes "this is just a bug" — is
