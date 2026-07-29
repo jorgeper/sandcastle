@@ -119,6 +119,12 @@ describe("conversational-prd template", () => {
     expect(decomposer).toContain("sub_issues");
     expect(filer).toContain("{{ISSUE_NUMBER}}");
     expect(filer).toContain("sandcastle:design");
+    // Grounding is a light survey, not debugging: the filer locates likely
+    // code, it never reproduces or diagnoses — the implement lane owns that.
+    expect(filer).toContain("Locate, don't verify");
+    expect(filer).toContain("do NOT attempt to reproduce");
+    // Code pointers are best-effort fallout of the quick survey, never a hunt.
+    expect(filer).toContain("never hunt");
     // Routing is always the human's call, in both directions.
     expect(filer).toContain("ALWAYS ask, never assume");
     expect(filer).toContain("Create a PRD anyway");
