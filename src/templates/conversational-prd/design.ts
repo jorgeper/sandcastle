@@ -109,6 +109,17 @@ async function startDesign(topic: string): Promise<Conversation> {
   });
 }
 
+// --- Recovery: a previous run may have died mid-turn --------------------------
+
+// chat() recovers on attach, but the phase-B path below never enters chat,
+// so an unanswered turn (e.g. Ctrl-C during a feedback send) must be
+// re-run here before anything calls send().
+if (convo.status === "awaiting-agent" || convo.status === "failed") {
+  console.log("Recovering an unanswered turn from a previous run…");
+  const turn = await convo.recover();
+  if (turn) console.log(`Designer: ${turn.message.split("\n", 1)[0]}`);
+}
+
 // --- Phase A: grilling chat ---------------------------------------------------
 
 let prUrl = prUrlOf(convo);
