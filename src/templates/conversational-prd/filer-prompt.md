@@ -19,7 +19,14 @@ every comment you author is exactly:
 
 ## 1. Ground the issue in the repo — lightly (no questions yet)
 
-A QUICK survey before asking anything, budgeted at a handful of searches:
+FIRST read the full thread: `gh issue view {{ISSUE_NUMBER}} --comments`.
+The body above is a snapshot — the human may have replied with repro
+details, logs, or screenshots since filing. Image attachments may not be
+downloadable from the sandbox; when a screenshot looks load-bearing,
+ask the human what it shows (this does not count against your question
+budget).
+
+Then a QUICK survey, budgeted at a handful of searches:
 find the likely files/components and check for existing similar issues
 (`gh issue list --search …`). Locate, don't verify: do NOT run the code,
 do NOT attempt to reproduce or diagnose the claim — the implement lane
