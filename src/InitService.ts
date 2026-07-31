@@ -29,6 +29,13 @@ export interface TemplateMetadata {
    * `npx tsx .sandcastle/main.ts` doesn't crash with ERR_MODULE_NOT_FOUND.
    */
   dependencies?: readonly string[];
+  /**
+   * True when the template ships a `config.mts` with the toolchain rewrite
+   * anchors (`TOOLCHAIN`, `INSTALL_COMMAND`, `COPY_TO_WORKTREE`,
+   * `VERIFY_COMMANDS`) that `scaffold()` rewrites from the resolved toolchain
+   * (prd/007).
+   */
+  toolchainConfig?: boolean;
 }
 
 const TEMPLATES: TemplateMetadata[] = [
@@ -68,6 +75,7 @@ const TEMPLATES: TemplateMetadata[] = [
     description:
       "Like parallel-planner-with-pr-review, but every issue gets a committed spec and the implementer runs in goal mode: Claude Code's native /goal turn loop self-verifies each attempt, with fresh-context retries between attempts",
     dependencies: ["zod"],
+    toolchainConfig: true,
   },
   {
     name: "conversational-prd",
@@ -86,6 +94,13 @@ export const getTemplateDependencies = (
   templateName: string,
 ): readonly string[] =>
   TEMPLATES.find((t) => t.name === templateName)?.dependencies ?? [];
+
+/**
+ * True when the named template ships a `config.mts` with toolchain rewrite
+ * anchors, i.e. `scaffold()`'s `options.toolchain` has somewhere to land.
+ */
+export const templateHasToolchainConfig = (templateName: string): boolean =>
+  TEMPLATES.find((t) => t.name === templateName)?.toolchainConfig === true;
 
 // ---------------------------------------------------------------------------
 // Package manager detection (internal — not part of public API)
@@ -840,6 +855,65 @@ const rewriteMainTs = (
       .pipe(Effect.mapError((e) => new Error(e.message)));
   });
 
+const DEFER_COMMENT =
+  "// TODO(sandcastle): verify commands not set — run the sandcastle-customize skill from your coding agent (or fill this in), then delete this comment.";
+
+/**
+ * Format a string array the way prettier would in the template source
+ * (`["a", "b"]`, space after comma) — `JSON.stringify` alone omits the space
+ * and would leave the rewritten consts inconsistent with the rest of the
+ * file's formatting.
+ */
+const formatStringArrayLiteral = (values: readonly string[]): string =>
+  `[${values.map((v) => JSON.stringify(v)).join(", ")}]`;
+
+/**
+ * Rewrite the four toolchain consts in a scaffolded `config.mts` from the
+ * resolved toolchain (prd/007). A no-op when the template has no
+ * `config.mts` (only `parallel-planner-goal-with-pr-review` does today).
+ */
+const rewriteConfigMts = (
+  configDir: string,
+  toolchain: ToolchainScaffold,
+): Effect.Effect<void, Error, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const configPath = join(configDir, "config.mts");
+    const exists = yield* fs
+      .exists(configPath)
+      .pipe(Effect.mapError((e) => new Error(e.message)));
+    if (!exists) return;
+    let content = yield* fs
+      .readFileString(configPath)
+      .pipe(Effect.mapError((e) => new Error(e.message)));
+    content = content
+      .replace(
+        /TOOLCHAIN = "[^"]*"/,
+        `TOOLCHAIN = ${JSON.stringify(toolchain.name)}`,
+      )
+      .replace(
+        /INSTALL_COMMAND = "[^"]*"/,
+        `INSTALL_COMMAND = ${JSON.stringify(toolchain.installCommand)}`,
+      )
+      .replace(
+        /COPY_TO_WORKTREE = \[[^\]]*\]/,
+        `COPY_TO_WORKTREE = ${formatStringArrayLiteral(toolchain.copyToWorktree)}`,
+      );
+    content =
+      toolchain.verifyCommands === "defer"
+        ? content.replace(
+            /VERIFY_COMMANDS = \[[^\]]*\]/,
+            `VERIFY_COMMANDS: string[] = []; ${DEFER_COMMENT}`,
+          )
+        : content.replace(
+            /VERIFY_COMMANDS = \[[^\]]*\]/,
+            `VERIFY_COMMANDS = ${formatStringArrayLiteral(toolchain.verifyCommands)}`,
+          );
+    yield* fs
+      .writeFileString(configPath, content)
+      .pipe(Effect.mapError((e) => new Error(e.message)));
+  });
+
 /**
  * When the user opted out of the Sandcastle label, strip ` --label Sandcastle`
  * from all `.md` files in the scaffolded config directory so that `gh issue list`
@@ -1003,6 +1077,19 @@ Run your **list** command inside the built image and confirm it returns the open
 // Main scaffold function
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolved toolchain facts written into the template's `config.mts`
+ * (prd/007). Data-only — deliberately not imported from `./Toolchain.js` to
+ * avoid an import cycle (Toolchain.ts detects; InitService.ts scaffolds).
+ */
+export interface ToolchainScaffold {
+  readonly name: string;
+  readonly installCommand: string;
+  readonly copyToWorktree: readonly string[];
+  /** "defer" writes the empty-list sentinel the doctor and loop nudge on. */
+  readonly verifyCommands: readonly string[] | "defer";
+}
+
 export interface ScaffoldOptions {
   agent: AgentEntry;
   model: string;
@@ -1010,6 +1097,7 @@ export interface ScaffoldOptions {
   createLabel?: boolean;
   issueTracker?: IssueTrackerEntry;
   sandboxProvider?: SandboxProviderEntry;
+  toolchain?: ToolchainScaffold;
 }
 
 export interface ScaffoldResult {
@@ -1114,6 +1202,12 @@ export const scaffold = (
     // Replace issue tracker template arguments in all text files (must run before label stripping)
     yield* substituteTemplateArgs(configDir, issueTracker);
 
+    // Rewrite the toolchain consts in config.mts from the resolved toolchain
+    // (prd/007). No-op when the template has no config.mts.
+    if (options.toolchain) {
+      yield* rewriteConfigMts(configDir, options.toolchain);
+    }
+
     // Strip --label Sandcastle from prompt files when the user declined label creation
     if (!createLabel) {
       yield* rewritePromptFiles(configDir);
@@ -1143,6 +1237,50 @@ export const scaffold = (
         )
         .pipe(Effect.mapError((e) => new Error(e.message)));
     }
+
+    // Vendor-base ancestor (prd/007): a pristine post-substitution copy of the
+    // scaffold, so a future `sandcastle update` can three-way merge instead of
+    // clobbering local edits. Committed, not gitignored — it must survive clones.
+    const baseDir = join(configDir, ".template-base");
+    yield* fs
+      .makeDirectory(baseDir, { recursive: false })
+      .pipe(Effect.mapError((e) => new Error(e.message)));
+    const scaffolded = yield* fs
+      .readDirectory(configDir)
+      .pipe(Effect.mapError((e) => new Error(e.message)));
+    yield* Effect.all(
+      scaffolded
+        .filter((f) => f !== ".template-base")
+        .map((f) =>
+          fs
+            .copyFile(join(configDir, f), join(baseDir, f))
+            .pipe(Effect.mapError((e) => new Error(e.message))),
+        ),
+      { concurrency: "unbounded" },
+    );
+    const sandcastleVersion = yield* Effect.gen(function* () {
+      const pkgPath = join(
+        dirname(fileURLToPath(import.meta.url)),
+        "..",
+        "package.json",
+      );
+      const content = yield* fs
+        .readFileString(pkgPath)
+        .pipe(Effect.orElseSucceed(() => "{}"));
+      try {
+        const v = (JSON.parse(content) as { version?: string }).version;
+        return typeof v === "string" ? v : "unknown";
+      } catch {
+        return "unknown";
+      }
+    });
+    yield* fs
+      .writeFileString(
+        join(baseDir, "BASE.json"),
+        JSON.stringify({ template: templateName, sandcastleVersion }, null, 2) +
+          "\n",
+      )
+      .pipe(Effect.mapError((e) => new Error(e.message)));
 
     return { mainFilename };
   });

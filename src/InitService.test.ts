@@ -2744,4 +2744,95 @@ describe("InitService scaffold", () => {
       expect(mainTs).toContain("sandbox: docker()");
     });
   });
+
+  describe("toolchain customization (prd/007)", () => {
+    const goalTemplate = {
+      templateName: "parallel-planner-goal-with-pr-review",
+    };
+
+    it("rewrites config.mts from the resolved toolchain", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        ...goalTemplate,
+        toolchain: {
+          name: "tauri",
+          installCommand: "pnpm install",
+          copyToWorktree: ["node_modules"],
+          verifyCommands: ["pnpm run typecheck", "pnpm run test:unit"],
+        },
+      });
+      const config = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      expect(config).toContain('TOOLCHAIN = "tauri"');
+      expect(config).toContain('INSTALL_COMMAND = "pnpm install"');
+      expect(config).toContain(
+        'VERIFY_COMMANDS = ["pnpm run typecheck", "pnpm run test:unit"]',
+      );
+    });
+
+    it("defer writes the sentinel: empty list + TODO comment", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        ...goalTemplate,
+        toolchain: {
+          name: "node",
+          installCommand: "npm install",
+          copyToWorktree: ["node_modules"],
+          verifyCommands: "defer",
+        },
+      });
+      const config = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      expect(config).toContain("VERIFY_COMMANDS: string[] = []");
+      expect(config).toContain("TODO(sandcastle)");
+      expect(config).toContain("sandcastle-customize");
+    });
+
+    it("no toolchain option leaves template defaults", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, goalTemplate);
+      const config = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      expect(config).toContain('TOOLCHAIN = "node"');
+      expect(config).toContain('INSTALL_COMMAND = "npm install"');
+    });
+
+    it("snapshots the scaffold to .template-base with a BASE.json marker", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, goalTemplate);
+      const baseDir = join(dir, ".sandcastle", ".template-base");
+      const baseFiles = await readdir(baseDir);
+      expect(baseFiles).toContain("config.mts");
+      expect(baseFiles).toContain("main.mts");
+      expect(baseFiles).toContain("BASE.json");
+      const marker = JSON.parse(
+        await readFile(join(baseDir, "BASE.json"), "utf-8"),
+      );
+      expect(marker.template).toBe("parallel-planner-goal-with-pr-review");
+      expect(typeof marker.sandcastleVersion).toBe("string");
+      // The ancestor matches what was scaffolded, byte for byte.
+      const scaffolded = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      const snapshot = await readFile(join(baseDir, "config.mts"), "utf-8");
+      expect(snapshot).toBe(scaffolded);
+    });
+
+    it("snapshots the blank template too (ancestor for every repo)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir); // blank
+      const baseFiles = await readdir(
+        join(dir, ".sandcastle", ".template-base"),
+      );
+      expect(baseFiles).toContain("BASE.json");
+      expect(baseFiles).toContain("prompt.md");
+    });
+  });
 });
