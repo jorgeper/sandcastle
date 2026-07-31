@@ -137,8 +137,10 @@ no single-comment discipline, no prior-attempt awareness. The scaffolded
 committing the directory is safe. (The doctor checks this, and
 `npm run sandcastle` warns at startup if the skill isn't committed.)
 
-If step 2 deferred the toolchain question, do it now: open Claude Code in
-this repo and run the **`sandcastle-customize`** skill (scaffolded at
+If step 2 deferred the toolchain question, do it now (or any time after
+step 2 — init itself scaffolds the skill, so it works even before labels
+or tokens exist): open Claude Code in this repo and run the
+**`sandcastle-customize`** skill (scaffolded at
 `.claude/skills/sandcastle-customize/SKILL.md`). It inspects the repo
 (manifests, scripts, CI config, CLAUDE.md/AGENTS.md), proposes verify
 commands with reasoning, and on approval edits `VERIFY_COMMANDS` in
