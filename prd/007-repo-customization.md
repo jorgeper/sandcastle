@@ -125,9 +125,11 @@ choose to.
 
 v1 scope is deliberately narrow: inspect the repo (manifests, scripts,
 CI config, CLAUDE.md/AGENTS.md), propose verify commands with reasoning,
-and on approval edit `VERIFY_COMMANDS` in `config.mts`. The SKILL.md is
-written so broader customization ("tune the reviewer") can be added
-later without restructuring; those interviews are non-goals now.
+and on approval edit `VERIFY_COMMANDS` in `config.mts`. Its done-message
+tells the owner to run `npm run sandcastle:doctor` to confirm the knobs
+check out (every path guides the next step). The SKILL.md is written so
+broader customization ("tune the reviewer") can be added later without
+restructuring; those interviews are non-goals now.
 
 ### 5. Prompts go project-agnostic
 
@@ -173,6 +175,34 @@ gate — the loop still runs.
 template already fixed. It gets the same one-line derivation
 (`git rev-parse --abbrev-ref HEAD`). No other sibling-template changes
 in this slice.
+
+## Onboarding walkthrough (the owner's view)
+
+The sequence for onboarding an existing repo, end to end. The rule
+throughout: every path guides the next step — no flow ends in silence.
+
+1. **`npx sandcastle init`.** The existing questions, plus the toolchain
+   step (§3): init detects the profile, scans the real scripts, and asks
+   confirm / edit / detect later. Confirm or edit → `config.mts` is
+   fully populated and **the skill is never needed**. Detect later, or
+   no manifest recognized → the sentinel is written.
+2. **Init's closing next-steps are path-aware.** The existing guidance
+   (package.json scripts, `.env`, image build, `npm run sandcastle:init`,
+   commit the scaffold) plus, only when the sentinel was written: "open
+   Claude Code and run the `sandcastle-customize` skill". Always last:
+   "run `npm run sandcastle:doctor` to verify the setup".
+3. **The customize skill** (when needed): inspects the repo, says what it
+   detected and why, proposes verify commands, asks questions only when
+   the evidence is ambiguous, edits `config.mts` on approval — and its
+   done-message points at doctor.
+4. **Doctor is the receipt**: existing checks plus the sentinel nudge and
+   the script-existence check (§6).
+5. **First run and after**: the default-branch guard warns on mismatch;
+   later tooling changes are a hand edit or a skill re-run, and doctor
+   re-validates either way.
+
+FORK-MANUAL's "Onboarding a repo" section is rewritten to this sequence
+when the slice lands (its manual steps 2, 5, and 8 absorb the changes).
 
 ## Non-goals
 
