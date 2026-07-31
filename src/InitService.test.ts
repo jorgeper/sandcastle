@@ -616,18 +616,18 @@ describe("InitService scaffold", () => {
       expect(joined).toContain("npm run sandcastle");
     });
 
-    it("non-blank template includes a note about customizing the install command", () => {
+    it("non-blank template includes a note about the toolchain-detected install command", () => {
       const lines = next("simple-loop", "main.mts");
       const joined = lines.join("\n");
-      expect(joined).toContain("npm install");
-      expect(joined).toContain("onSandboxReady");
+      expect(joined).toContain("install command");
+      expect(joined).toContain("config.mts");
     });
 
-    it("non-blank template mentions copyToWorktree and node_modules", () => {
+    it("non-blank template mentions copyToWorktree and points at config.mts", () => {
       const lines = next("simple-loop", "main.mts");
       const joined = lines.join("\n");
       expect(joined).toContain("copyToWorktree");
-      expect(joined).toContain("node_modules");
+      expect(joined).toContain("config.mts");
     });
 
     it("blank template includes a step to customize prompt.md", () => {
@@ -788,6 +788,30 @@ describe("InitService scaffold", () => {
       const joined = lines.join("\n");
       expect(joined.toLowerCase()).toContain("host");
       expect(joined).toContain(getAgent("opencode")!.setupCommand);
+    });
+
+    it("next steps guide the defer path to the customize skill and always end with doctor (prd/007)", () => {
+      const tracker = getIssueTracker("github-issues")!;
+      const deferred = getNextStepsLines(
+        "parallel-planner-goal-with-pr-review",
+        "main.mts",
+        tracker,
+        claudeCodeAgent,
+        "npm",
+        { deferred: true },
+      ).join("\n");
+      expect(deferred).toContain("sandcastle-customize");
+      expect(deferred).toContain("npm run sandcastle:doctor");
+      const confirmed = getNextStepsLines(
+        "parallel-planner-goal-with-pr-review",
+        "main.mts",
+        tracker,
+        claudeCodeAgent,
+        "npm",
+        { deferred: false },
+      ).join("\n");
+      expect(confirmed).not.toContain("sandcastle-customize");
+      expect(confirmed).toContain("npm run sandcastle:doctor");
     });
   });
 

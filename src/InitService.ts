@@ -666,6 +666,7 @@ export function getNextStepsLines(
   issueTracker: IssueTrackerEntry,
   agent: AgentEntry,
   packageManager: PackageManager,
+  verify?: { deferred: boolean },
 ): string[] {
   // The custom issue tracker scaffolds a broken-until-configured project, so
   // its next steps are about running the setup prompt — not the template's
@@ -713,7 +714,7 @@ export function getNextStepsLines(
     }
     lines.push(
       `${step++}. Add "sandcastle": "npx tsx .sandcastle/${mainFilename}" to your package.json scripts`,
-      `${step++}. Templates use \`copyToWorktree: ["node_modules"]\` to copy your host node_modules into the sandbox for fast startup — the \`npm install\` in the onSandboxReady hook is a safety net for platform-specific binaries. Adjust both if you use a different package manager`,
+      `${step++}. The sandbox install command and copyToWorktree paths were set from your detected toolchain in .sandcastle/config.mts — adjust there if detection got it wrong`,
     );
     if (usesPlanSchema) {
       lines.push(
@@ -726,6 +727,16 @@ export function getNextStepsLines(
     if (hasReviewer) {
       lines.push(
         `${step++}. Customize .sandcastle/CODING_STANDARDS.md with your project's standards — the reviewer agent loads it during review`,
+      );
+    }
+    if (template === "parallel-planner-goal-with-pr-review") {
+      if (verify?.deferred) {
+        lines.push(
+          `${step++}. Verify commands are DEFERRED — after \`npm run sandcastle:init\`, run the "sandcastle-customize" skill from your coding agent in this repo to set them (agents can't verify their work until then)`,
+        );
+      }
+      lines.push(
+        `${step++}. Run \`npm run sandcastle:doctor\` to verify the setup end-to-end`,
       );
     }
     lines.push(`${step++}. Run \`npm run sandcastle\` to start the agent`);

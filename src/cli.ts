@@ -26,13 +26,20 @@ import {
   addDependencyCommand,
   hostHasDependency,
   getTemplateDependencies,
+  templateHasToolchainConfig,
 } from "./InitService.js";
 import { defaultImageName } from "./sandboxes/docker.js";
 import type {
   AgentEntry,
   IssueTrackerEntry,
   SandboxProviderEntry,
+  ToolchainScaffold,
 } from "./InitService.js";
+import {
+  detectToolchain,
+  resolveToolchain,
+  TOOLCHAIN_NAMES,
+} from "./Toolchain.js";
 import { ConfigDirError, InitError } from "./errors.js";
 import { VERSION } from "./version.js";
 
@@ -144,6 +151,20 @@ const installTemplateDepsOption = Options.choice("install-template-deps", [
   Options.optional,
 );
 
+const toolchainOption = Options.choice("toolchain", [...TOOLCHAIN_NAMES]).pipe(
+  Options.withDescription(
+    "Toolchain profile for templates with a config.mts (default: detected from the repo's manifests)",
+  ),
+  Options.optional,
+);
+
+const verifyCommandsOption = Options.text("verify-commands").pipe(
+  Options.withDescription(
+    'Verify commands for the scaffolded config.mts: comma-separated commands, "detect" to accept the auto-proposal, or "defer" to set them later via the sandcastle-customize skill',
+  ),
+  Options.optional,
+);
+
 /**
  * Translate an `Options.choice("flag", ["true", "false"]).optional` value into
  * a tri-state boolean. None when the flag was absent; otherwise the parsed bool.
@@ -165,6 +186,8 @@ const initCommand = Command.make(
     createLabel: createLabelOption,
     buildImage: buildImageOption,
     installTemplateDeps: installTemplateDepsOption,
+    toolchain: toolchainOption,
+    verifyCommands: verifyCommandsOption,
   },
   ({
     imageName: imageNameFlag,
@@ -176,6 +199,8 @@ const initCommand = Command.make(
     createLabel: createLabelFlag,
     buildImage: buildImageFlag,
     installTemplateDeps: installTemplateDepsFlag,
+    toolchain: toolchainFlag,
+    verifyCommands: verifyCommandsFlag,
   }) =>
     Effect.gen(function* () {
       const d = yield* Display;
@@ -417,6 +442,96 @@ const initCommand = Command.make(
         }
       }
 
+      // Toolchain + verify commands (prd/007) — only for templates that carry a
+      // config.mts. Detect + confirm, with an explicit defer escape hatch.
+      let toolchainScaffold: ToolchainScaffold | undefined;
+      if (templateHasToolchainConfig(selectedTemplate)) {
+        const detected =
+          toolchainFlag._tag === "Some"
+            ? yield* resolveToolchain(cwd, toolchainFlag.value)
+            : yield* detectToolchain(cwd);
+        const proposal = detected?.verifyProposal ?? [];
+
+        let verifyCommands: readonly string[] | "defer";
+        if (verifyCommandsFlag._tag === "Some") {
+          const raw = verifyCommandsFlag.value.trim();
+          verifyCommands =
+            raw === "defer"
+              ? "defer"
+              : raw === "detect"
+                ? proposal.length > 0
+                  ? proposal
+                  : "defer"
+                : raw
+                    .split(",")
+                    .map((c) => c.trim())
+                    .filter(Boolean);
+        } else {
+          if (!isInteractive) {
+            yield* failIfNonInteractive("--verify-commands");
+          }
+          const detectionLine = detected
+            ? `Detected: ${detected.profile.label} (${detected.evidence}).`
+            : "No toolchain detected from the repo's manifests.";
+          const proposalLine =
+            proposal.length > 0 ? proposal.join(", ") : "none proposed";
+          const choice = yield* Effect.promise(() =>
+            clack.select({
+              message: `${detectionLine} Verify commands: ${proposalLine}`,
+              initialValue: proposal.length > 0 ? "confirm" : "defer",
+              options: [
+                ...(proposal.length > 0
+                  ? [{ value: "confirm", label: `Use: ${proposalLine}` }]
+                  : []),
+                { value: "edit", label: "Type the commands myself" },
+                {
+                  value: "defer",
+                  label:
+                    "Detect later (the sandcastle-customize skill will help)",
+                },
+              ],
+            }),
+          );
+          if (clack.isCancel(choice)) {
+            yield* Effect.fail(
+              new InitError({
+                message: "Verify-commands selection cancelled.",
+              }),
+            );
+          }
+          if (choice === "confirm") {
+            verifyCommands = proposal;
+          } else if (choice === "edit") {
+            const typed = yield* Effect.promise(() =>
+              clack.text({
+                message: "Verify commands (comma-separated):",
+                initialValue: proposal.join(", "),
+              }),
+            );
+            if (clack.isCancel(typed)) {
+              yield* Effect.fail(
+                new InitError({ message: "Verify-commands entry cancelled." }),
+              );
+            }
+            const parsed = String(typed)
+              .split(",")
+              .map((c) => c.trim())
+              .filter(Boolean);
+            verifyCommands = parsed.length > 0 ? parsed : "defer";
+          } else {
+            verifyCommands = "defer";
+          }
+        }
+
+        const profile = detected?.profile;
+        toolchainScaffold = {
+          name: profile?.name ?? "node",
+          installCommand: detected?.installCommand ?? "npm install",
+          copyToWorktree: profile?.copyToWorktree ?? ["node_modules"],
+          verifyCommands,
+        };
+      }
+
       const scaffoldResult = yield* d.spinner(
         "Scaffolding .sandcastle/ config directory...",
         scaffold(cwd, {
@@ -426,6 +541,7 @@ const initCommand = Command.make(
           createLabel: shouldCreateLabel,
           issueTracker: selectedIssueTracker,
           sandboxProvider: selectedSandboxProvider,
+          toolchain: toolchainScaffold,
         }).pipe(
           Effect.mapError(
             (e) =>
@@ -526,6 +642,9 @@ const initCommand = Command.make(
         selectedIssueTracker,
         selectedAgent,
         packageManager,
+        toolchainScaffold
+          ? { deferred: toolchainScaffold.verifyCommands === "defer" }
+          : undefined,
       );
       for (const [i, line] of nextSteps.entries()) {
         yield* d.text(i === 0 ? line : styleText("dim", line));
