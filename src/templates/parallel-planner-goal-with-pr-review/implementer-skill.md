@@ -36,8 +36,11 @@ If applicable, use RGR to complete the task:
 
 ## Feedback loops
 
-Before committing, run `npm run typecheck` and `npm run test` and make sure
-they pass — the goal judge needs to see their output in your session.
+Before committing, run the verify commands declared in
+`.sandcastle/config.mts` (the `VERIFY_COMMANDS` list) and make sure they
+pass — the goal judge needs to see their output in your session. Your
+repo's CLAUDE.md/AGENTS.md may refine which commands are appropriate; it
+overrides the list.
 
 ## Commits
 

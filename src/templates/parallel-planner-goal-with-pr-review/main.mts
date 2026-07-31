@@ -350,6 +350,7 @@ const runDebate = async (
           REPO: repo,
           THREADS_JSON: threadsJson,
           BRANCH: branch,
+          VERIFY_COMMANDS: VERIFY_TEXT,
         },
       });
       await pushBranch(sandbox.worktreePath, branch);
@@ -521,6 +522,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         promptArgs: {
           AGENT_NAME: "conflict-resolver",
           BRANCH: branch,
+          VERIFY_COMMANDS: VERIFY_TEXT,
         },
       });
       await pushBranch(sandbox.worktreePath, branch);
@@ -654,6 +656,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
             SPEC_PATH: specPath,
             REPO: await github.repoSlug(),
             AGENT_MARKER: markerFor("spec-writer", "claude-code", specModel),
+            VERIFY_COMMANDS: VERIFY_TEXT,
           },
           completionSignal: "</spec>",
         });
@@ -836,6 +839,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     promptArgs: {
       BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
       ISSUES: completedIssues.map((i) => `- ${i.id}: ${i.title}`).join("\n"),
+      VERIFY_COMMANDS: VERIFY_TEXT,
     },
   });
 

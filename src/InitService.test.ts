@@ -1439,6 +1439,35 @@ describe("InitService scaffold", () => {
       expect(spec).toContain("package.json");
     });
 
+    it("prompts carry no hardcoded verify commands — {{VERIFY_COMMANDS}} instead (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const read = (f: string) =>
+        readFile(join(dir, ".sandcastle", f), "utf-8");
+      for (const file of [
+        "spec-prompt.md",
+        "merge-prompt.md",
+        "pr-conflict-prompt.md",
+        "pr-address-prompt.md",
+      ]) {
+        const content = await read(file);
+        // Tier-2 rule: repo-specific commands come from the knob, never the text.
+        expect(content, file).toContain("{{VERIFY_COMMANDS}}");
+        expect(content, file).not.toContain("npm run typecheck");
+        expect(content, file).not.toContain("npm run test");
+      }
+      // The scaffolded skill is copied, not run through run() — it defers to
+      // config.mts instead of carrying a placeholder.
+      const skill = await read("implementer-skill.md");
+      expect(skill).toContain("config.mts");
+      expect(skill).not.toContain("npm run typecheck");
+      // Every prompt with the placeholder gets the arg (fail-fast pairing).
+      const mainTs = await read("main.mts");
+      expect(mainTs.match(/VERIFY_COMMANDS: VERIFY_TEXT/g)?.length).toBe(4);
+    });
+
     it("doctor and main loop detect an uncommitted implementer skill", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {

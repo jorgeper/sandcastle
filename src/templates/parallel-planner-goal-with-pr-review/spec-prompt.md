@@ -46,24 +46,26 @@ needs. Keep it short — the implementer can explore.>
 
 Rules for the goal statement and acceptance criteria:
 
-- **Observable end states, not actions.** "A summary comment exists on issue #{{TASK_ID}}", never "post a comment". "npm run typecheck and npm run test
-  have been run and pass", never "run the tests". This is what makes re-runs
+- **Observable end states, not actions.** "A summary comment exists on issue #{{TASK_ID}}", never "post a comment". "The verify commands have been
+  run and pass", never "run the tests". This is what makes re-runs
   idempotent: a judge re-evaluating from actual state must not double-fire
   work that already happened.
 - The goal statement is one sentence naming the spec file: "All acceptance
   criteria in {{SPEC_PATH}} are satisfied for issue #{{TASK_ID}}, with
   evidence visible in the session: <the 2-4 most load-bearing criteria
   inline>."
-- Always include these two criteria: `npm run typecheck` and `npm run test`
-  pass (run in the implementer's session), and a summary comment from the
-  implementer exists on issue #{{TASK_ID}}.
+- Always include these two criteria: {{VERIFY_COMMANDS}} pass (run in the
+  implementer's session), and a summary comment from the implementer exists
+  on issue #{{TASK_ID}}.
 - Keep the goal statement under 1,500 characters; detail belongs in the
   acceptance criteria, which the file carries.
 - Any command the goal or criteria reference MUST exist: check
-  package.json `scripts` and name the real ones (e.g. `npm run test:unit`,
-  not an assumed `npm run test`). A goal referencing a nonexistent command
+  package.json `scripts` and name the real ones (a repo may declare
+  `test:unit` but no `test`). A goal referencing a nonexistent command
   is unsatisfiable as written — the judge can't verify it and the
-  implementer wastes attempts arguing equivalence.
+  implementer wastes attempts arguing equivalence. Your repo's
+  CLAUDE.md/AGENTS.md may refine which commands are appropriate — it
+  overrides the defaults above.
 
 # COMMIT
 

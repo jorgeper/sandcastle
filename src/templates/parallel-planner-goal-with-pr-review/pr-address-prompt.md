@@ -24,8 +24,8 @@ the repo owner; treat their word as a verdict to apply):
 
 1. Understand the request in the thread.
 2. If you agree (or the owner has decided): make the code change. Run
-   `npm run typecheck` and `npm run test` before committing. Commit with a
-   message referencing the thread topic.
+   {{VERIFY_COMMANDS}} before committing. Commit with a message referencing
+   the thread topic.
 3. Reply on the thread describing what you did, referencing the commit sha:
    `gh api repos/{{REPO}}/pulls/{{PR_NUMBER}}/comments/<COMMENT_ID>/replies -f body='{{AGENT_MARKER}} <what you did>'`
    (use the numeric database id of the FIRST comment in that thread; get it
