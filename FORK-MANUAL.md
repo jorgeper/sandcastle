@@ -82,6 +82,18 @@ is `main.ts` when the repo's package.json has `"type": "module"`, else
 `main.mts` — check `ls .sandcastle` before writing scripts that reference
 it.
 
+Init also asks a **toolchain question** (prd/007) for this template, since
+it carries a `.sandcastle/config.mts`: it detects a profile from the
+repo's manifests (node / react-web / tauri / go / python) and proposes
+verify commands scanned from the repo's real `package.json` scripts, then
+asks **confirm / edit / detect later**. Confirm or edit writes the knobs
+straight into `config.mts` and the customize skill below is never needed.
+"Detect later" (or no manifest recognized) leaves `VERIFY_COMMANDS = []`
+with a `// TODO(sandcastle)` sentinel — safe, never silent, because doctor
+nudges until it's resolved (step 8). Non-interactively, pass
+`--toolchain <profile>` and `--verify-commands "<cmd>,<cmd>"` (or
+`--verify-commands detect` / `--verify-commands defer`).
+
 **3. Layer the conversational lanes** (no combined template yet):
 
 ```bash
@@ -125,6 +137,15 @@ no single-comment discipline, no prior-attempt awareness. The scaffolded
 committing the directory is safe. (The doctor checks this, and
 `npm run sandcastle` warns at startup if the skill isn't committed.)
 
+If step 2 deferred the toolchain question, do it now: open Claude Code in
+this repo and run the **`sandcastle-customize`** skill (scaffolded at
+`.claude/skills/sandcastle-customize/SKILL.md`). It inspects the repo
+(manifests, scripts, CI config, CLAUDE.md/AGENTS.md), proposes verify
+commands with reasoning, and on approval edits `VERIFY_COMMANDS` in
+`.sandcastle/config.mts` — no hand-editing required, though the file is
+plain TS consts if you'd rather edit it yourself. Commit the edit; doctor
+(step 8) is the receipt that it stuck.
+
 **7. Dockerfile = toolchain.** Before (or after — rebuild any time with
 `npx sandcastle docker build-image`) the image build, bake in what agents
 would otherwise reinstall per sandbox: browsers, system packages. E.g.
@@ -139,6 +160,14 @@ download browsers, that belongs in the image.
 npm run sandcastle:doctor    # env, token issue-access probe, image, labels
 npm run sandcastle:issue -- "a small real improvement"
 ```
+
+Doctor's `verify commands` check is the toolchain receipt (prd/007): it
+fails loud if `VERIFY_COMMANDS` is still the empty sentinel (nudges you to
+the customize skill, step 6) and separately if a declared `npm run X`
+command has no matching `package.json` script — a wrong knob caught here,
+not three agent-turns deep in an unsatisfiable spec goal. Independently,
+`npm run sandcastle` warns at startup (never blocks) if the loop's current
+branch doesn't match the repo's GitHub default branch.
 
 The filer lane is the gentlest first run: capture is instant, `y` opens
 the chat, route to `Sandcastle`, then `npm run sandcastle` to watch the

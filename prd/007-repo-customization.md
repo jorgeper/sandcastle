@@ -1,7 +1,7 @@
 # Per-repo customization: toolchain profiles, VERIFY_COMMANDS, and the customize skill
 
 **Date:** 2026-07-30
-**Status:** Approved design, pre-implementation
+**Status:** Implemented
 **Branch:** `feat/repo-customization`
 **Tracking issue:** [jorgeper/sandcastle#10](https://github.com/jorgeper/sandcastle/issues/10)
 
