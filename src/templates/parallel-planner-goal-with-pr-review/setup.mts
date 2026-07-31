@@ -6,6 +6,7 @@ import { execFile } from "node:child_process";
 import { basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { VERIFY_COMMANDS } from "./config.mts";
 import { parseEnvFile } from "./env.mts";
 import * as github from "./github.mts";
 import {
@@ -14,6 +15,7 @@ import {
   scanLogs,
   type InstallDetection,
 } from "./install-scan.mts";
+import { missingVerifyScripts } from "./verify.mts";
 
 const execFileAsync = promisify(execFile);
 
@@ -197,6 +199,37 @@ export const runDoctor = async (options?: {
       };
     }
     return { ok: true, detail: "committed on HEAD" };
+  });
+
+  await check("verify commands", async () => {
+    // Tier-2 knob honesty (prd/007): a wrong VERIFY_COMMANDS fails loud
+    // here, not three agent-turns deep in an unsatisfiable spec goal.
+    if (VERIFY_COMMANDS.length === 0) {
+      return {
+        ok: false,
+        detail:
+          "VERIFY_COMMANDS in .sandcastle/config.mts is empty — spec goals and merge checks can't name verification",
+        hint: 'run the "sandcastle-customize" skill from your coding agent in this repo (or edit .sandcastle/config.mts by hand)',
+      };
+    }
+    let scripts: Record<string, string> = {};
+    try {
+      const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
+        scripts?: Record<string, string>;
+      };
+      scripts = pkg.scripts ?? {};
+    } catch {
+      // No package.json (non-node repo): pm-run checks don't apply.
+    }
+    const missing = missingVerifyScripts(VERIFY_COMMANDS, scripts);
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        detail: `package.json has no script(s): ${missing.join(", ")}`,
+        hint: "fix VERIFY_COMMANDS in .sandcastle/config.mts or add the scripts to package.json",
+      };
+    }
+    return { ok: true, detail: VERIFY_COMMANDS.join(", ") };
   });
 
   await check("docker sandbox image", async () => {

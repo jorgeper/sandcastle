@@ -422,11 +422,48 @@ const warnUncommittedSkill = async (): Promise<void> => {
   }
 };
 
+// Nudge, not a gate (prd/007): an empty VERIFY_COMMANDS means init deferred
+// detection — agents can't be told how to verify until it's set.
+const warnEmptyVerifyCommands = (): void => {
+  if (VERIFY_COMMANDS.length > 0) return;
+  console.warn(
+    `⚠ VERIFY_COMMANDS in .sandcastle/config.mts is empty — spec goals and merge checks can't name verification commands.\n` +
+      `  Fix: run the "sandcastle-customize" skill from your coding agent in this repo, or edit .sandcastle/config.mts by hand.`,
+  );
+};
+
+// Nudge, not a gate (prd/007 Tier-1 guard): the loop anchors merges and PRs
+// to the branch it runs on — starting it on a side branch is usually an
+// accident worth flagging, never blocking.
+const warnNonDefaultBranch = async (): Promise<void> => {
+  try {
+    const { stdout } = await execFileAsync("gh", [
+      "repo",
+      "view",
+      "--json",
+      "defaultBranchRef",
+      "--jq",
+      ".defaultBranchRef.name",
+    ]);
+    const defaultBranch = stdout.trim();
+    if (defaultBranch && defaultBranch !== TARGET_BRANCH) {
+      console.warn(
+        `⚠ loop is running on "${TARGET_BRANCH}" but the repo's default branch is "${defaultBranch}" — merges and PRs will target "${TARGET_BRANCH}".\n` +
+          `  If that's not intended, stop and re-run from "${defaultBranch}".`,
+      );
+    }
+  } catch {
+    // Best-effort nudge; never block the loop on gh availability.
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
 
 await warnUncommittedSkill();
+warnEmptyVerifyCommands();
+await warnNonDefaultBranch();
 await nudgeConversationalLanes();
 
 // Image-gap nudge (prd/006): logs modified after this instant belong to

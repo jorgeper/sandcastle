@@ -1468,6 +1468,30 @@ describe("InitService scaffold", () => {
       expect(mainTs.match(/VERIFY_COMMANDS: VERIFY_TEXT/g)?.length).toBe(4);
     });
 
+    it("doctor checks verify commands; loop nudges on empty knob and non-default branch (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const setup = await readFile(
+        join(dir, ".sandcastle", "setup.mts"),
+        "utf-8",
+      );
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      // Doctor: empty knob nudges toward the customize skill; declared
+      // `<pm> run X` commands must exist in package.json scripts.
+      expect(setup).toContain("verify commands");
+      expect(setup).toContain("sandcastle-customize");
+      expect(setup).toContain("missingVerifyScripts");
+      // Loop startup: nudge (never gate) on empty knob and on a loop branch
+      // that differs from the repo's default branch.
+      expect(mainTs).toContain("warnEmptyVerifyCommands");
+      expect(mainTs).toContain("defaultBranchRef");
+    });
+
     it("doctor and main loop detect an uncommitted implementer skill", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {
