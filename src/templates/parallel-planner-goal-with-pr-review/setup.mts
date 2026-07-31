@@ -6,6 +6,7 @@ import { execFile } from "node:child_process";
 import { basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { VERIFY_COMMANDS } from "./config.mts";
 import { parseEnvFile } from "./env.mts";
 import * as github from "./github.mts";
 import {
@@ -14,6 +15,7 @@ import {
   scanLogs,
   type InstallDetection,
 } from "./install-scan.mts";
+import { missingVerifyScripts } from "./verify.mts";
 
 const execFileAsync = promisify(execFile);
 
@@ -53,27 +55,44 @@ export const printHelp = (): void => {
 // live as a committed Claude Code skill that every sandbox checkout carries.
 // Written once, committed by the owner; never overwritten if present.
 const SKILL_PATH = ".claude/skills/sandcastle-implementer/SKILL.md";
+const CUSTOMIZE_SKILL_PATH = ".claude/skills/sandcastle-customize/SKILL.md";
 
-export const scaffoldImplementerSkill = (): "created" | "exists" => {
-  if (existsSync(SKILL_PATH)) return "exists";
-  const source = fileURLToPath(
-    new URL("./implementer-skill.md", import.meta.url),
-  );
-  mkdirSync(dirname(SKILL_PATH), { recursive: true });
-  writeFileSync(SKILL_PATH, readFileSync(source, "utf8"));
+const scaffoldSkill = (
+  targetPath: string,
+  sourceFile: string,
+): "created" | "exists" => {
+  if (existsSync(targetPath)) return "exists";
+  const source = fileURLToPath(new URL(sourceFile, import.meta.url));
+  mkdirSync(dirname(targetPath), { recursive: true });
+  writeFileSync(targetPath, readFileSync(source, "utf8"));
   return "created";
 };
 
-export const runInit = async (): Promise<void> => {
-  const repo = await github.repoSlug();
-  const created = await github.ensureLabelsExist(github.ALL_LABEL_DEFS);
+export const scaffoldImplementerSkill = (): "created" | "exists" =>
+  scaffoldSkill(SKILL_PATH, "./implementer-skill.md");
 
+export const scaffoldCustomizeSkill = (): "created" | "exists" =>
+  scaffoldSkill(CUSTOMIZE_SKILL_PATH, "./customize-skill.md");
+
+export const runInit = async (): Promise<void> => {
+  // Scaffold the local skills BEFORE any GitHub call: a bad token or missing
+  // remote must not strand purely local scaffolding (nudges-not-gates).
   const skill = scaffoldImplementerSkill();
   console.log(
     skill === "created"
       ? `Wrote ${SKILL_PATH} — commit it so implementer sandboxes pick it up.`
       : `${SKILL_PATH} already exists — left untouched.`,
   );
+
+  const customize = scaffoldCustomizeSkill();
+  console.log(
+    customize === "created"
+      ? `Wrote ${CUSTOMIZE_SKILL_PATH} — run it from your coding agent to tune verify commands; commit it with the scaffold.`
+      : `${CUSTOMIZE_SKILL_PATH} already exists — left untouched.`,
+  );
+
+  const repo = await github.repoSlug();
+  const created = await github.ensureLabelsExist(github.ALL_LABEL_DEFS);
 
   console.log(`Sandcastle labels in ${repo}:\n`);
   for (const [name, on, by, meaning] of LABEL_ROWS) {
@@ -197,6 +216,37 @@ export const runDoctor = async (options?: {
       };
     }
     return { ok: true, detail: "committed on HEAD" };
+  });
+
+  await check("verify commands", async () => {
+    // Tier-2 knob honesty (prd/007): a wrong VERIFY_COMMANDS fails loud
+    // here, not three agent-turns deep in an unsatisfiable spec goal.
+    if (VERIFY_COMMANDS.length === 0) {
+      return {
+        ok: false,
+        detail:
+          "VERIFY_COMMANDS in .sandcastle/config.mts is empty — spec goals and merge checks can't name verification",
+        hint: 'run the "sandcastle-customize" skill from your coding agent in this repo (or edit .sandcastle/config.mts by hand)',
+      };
+    }
+    let scripts: Record<string, string> = {};
+    try {
+      const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
+        scripts?: Record<string, string>;
+      };
+      scripts = pkg.scripts ?? {};
+    } catch {
+      // No package.json (non-node repo): pm-run checks don't apply.
+    }
+    const missing = missingVerifyScripts(VERIFY_COMMANDS, scripts);
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        detail: `package.json has no script(s): ${missing.join(", ")}`,
+        hint: "fix VERIFY_COMMANDS in .sandcastle/config.mts or add the scripts to package.json",
+      };
+    }
+    return { ok: true, detail: VERIFY_COMMANDS.join(", ") };
   });
 
   await check("docker sandbox image", async () => {

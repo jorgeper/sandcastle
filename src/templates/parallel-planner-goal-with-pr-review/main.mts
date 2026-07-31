@@ -56,6 +56,19 @@ import {
 } from "./state.mts";
 import * as github from "./github.mts";
 import { printHelp, runDoctor, runInit } from "./setup.mts";
+import {
+  COPY_TO_WORKTREE,
+  GOAL_MAX_TURNS,
+  IMPLEMENT_ATTEMPTS,
+  INSTALL_COMMAND,
+  MARKER_DETAIL,
+  MAX_DEBATE_ROUNDS,
+  MAX_ITERATIONS,
+  PR_SUMMARY_DETAILED,
+  SPEC_DIR,
+  VERIFY_COMMANDS,
+} from "./config.mts";
+import { verifyCommandsText } from "./verify.mts";
 
 const execFileAsync = promisify(execFile);
 
@@ -93,29 +106,9 @@ const specSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// Configuration — every knob for this template, in one place
+// Configuration — knobs live in ./config.mts (one place, also read by the
+// doctor). Only derived values stay here.
 // ---------------------------------------------------------------------------
-
-// Repo-relative directory where per-issue specs are committed. Rename to
-// "prd", "docs/specs", etc. — the spec writer, goal statements, and issue
-// comments all follow it. Specs land at `<SPEC_DIR>/issue-<n>.md`.
-const SPEC_DIR = "specs";
-
-// Inner turn bound for each implementer attempt: "or stop after N turns" is
-// appended to the goal so a stalled attempt ends and the next fresh-context
-// attempt takes over instead of spinning forever.
-const GOAL_MAX_TURNS = 25;
-
-// Outer fresh-context attempts per issue (`maxIterations` of the goal run).
-// Each attempt is a full autonomous /goal session, so keep this small.
-const IMPLEMENT_ATTEMPTS = 4;
-
-// Maximum number of classify→plan→execute→merge cycles before stopping.
-const MAX_ITERATIONS = 10;
-
-// Reviewer turns per debate invocation before deadlocked threads escalate to
-// the owner as NEEDS-DECISION.
-const MAX_DEBATE_ROUNDS = 3;
 
 // Issues carrying this label get a PR + outer review instead of the inner
 // reviewer + local merge.
@@ -130,16 +123,6 @@ const TARGET_BRANCH = (
   await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"])
 ).stdout.trim();
 
-// When true, PR/issue markers carry full provenance: **[agent · harness ·
-// model]**. Set false for plain **[agent]** markers. Turn-taking parses the
-// agent name either way.
-const MARKER_DETAIL = true;
-
-// When true (default), PR descriptions include a commit-by-commit
-// walkthrough so the owner never has to click into individual commits.
-// False keeps the tighter what/why summary — fewer pr-writer tokens.
-const PR_SUMMARY_DETAILED = true;
-
 // Models are deliberately NOT configured here: each agent's harness and
 // model are declared inline at its sandbox.run()/run() call site, so any
 // agent can run a different model (or harness) by editing that one spot.
@@ -147,13 +130,17 @@ const PR_SUMMARY_DETAILED = true;
 const branchFor = (issueNumber: number) => `sandcastle/issue-${issueNumber}`;
 
 // Hooks run inside the sandbox before the agent starts each iteration.
+// The install command comes from the detected toolchain (config.mts).
 const hooks = {
-  sandbox: { onSandboxReady: [{ command: "npm install" }] },
+  sandbox: { onSandboxReady: [{ command: INSTALL_COMMAND }] },
 };
 
-// Copy node_modules from the host into the worktree before each sandbox
-// starts.
-const copyToWorktree = ["node_modules"];
+// Copied from the host into the worktree before each sandbox starts.
+const copyToWorktree = [...COPY_TO_WORKTREE];
+
+// Prompt-ready rendering of the verify commands, injected as the
+// VERIFY_COMMANDS prompt arg everywhere agents are told to verify work.
+const VERIFY_TEXT = verifyCommandsText(VERIFY_COMMANDS);
 
 // ---------------------------------------------------------------------------
 // Agent identity & attribution
@@ -363,6 +350,7 @@ const runDebate = async (
           REPO: repo,
           THREADS_JSON: threadsJson,
           BRANCH: branch,
+          VERIFY_COMMANDS: VERIFY_TEXT,
         },
       });
       await pushBranch(sandbox.worktreePath, branch);
@@ -434,11 +422,48 @@ const warnUncommittedSkill = async (): Promise<void> => {
   }
 };
 
+// Nudge, not a gate (prd/007): an empty VERIFY_COMMANDS means init deferred
+// detection — agents can't be told how to verify until it's set.
+const warnEmptyVerifyCommands = (): void => {
+  if (VERIFY_COMMANDS.length > 0) return;
+  console.warn(
+    `⚠ VERIFY_COMMANDS in .sandcastle/config.mts is empty — spec goals and merge checks can't name verification commands.\n` +
+      `  Fix: run the "sandcastle-customize" skill from your coding agent in this repo, or edit .sandcastle/config.mts by hand.`,
+  );
+};
+
+// Nudge, not a gate (prd/007 Tier-1 guard): the loop anchors merges and PRs
+// to the branch it runs on — starting it on a side branch is usually an
+// accident worth flagging, never blocking.
+const warnNonDefaultBranch = async (): Promise<void> => {
+  try {
+    const { stdout } = await execFileAsync("gh", [
+      "repo",
+      "view",
+      "--json",
+      "defaultBranchRef",
+      "--jq",
+      ".defaultBranchRef.name",
+    ]);
+    const defaultBranch = stdout.trim();
+    if (defaultBranch && defaultBranch !== TARGET_BRANCH) {
+      console.warn(
+        `⚠ loop is running on "${TARGET_BRANCH}" but the repo's default branch is "${defaultBranch}" — merges and PRs will target "${TARGET_BRANCH}".\n` +
+          `  If that's not intended, stop and re-run from "${defaultBranch}".`,
+      );
+    }
+  } catch {
+    // Best-effort nudge; never block the loop on gh availability.
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
 
 await warnUncommittedSkill();
+warnEmptyVerifyCommands();
+await warnNonDefaultBranch();
 await nudgeConversationalLanes();
 
 // Image-gap nudge (prd/006): logs modified after this instant belong to
@@ -534,6 +559,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         promptArgs: {
           AGENT_NAME: "conflict-resolver",
           BRANCH: branch,
+          VERIFY_COMMANDS: VERIFY_TEXT,
         },
       });
       await pushBranch(sandbox.worktreePath, branch);
@@ -667,6 +693,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
             SPEC_PATH: specPath,
             REPO: await github.repoSlug(),
             AGENT_MARKER: markerFor("spec-writer", "claude-code", specModel),
+            VERIFY_COMMANDS: VERIFY_TEXT,
           },
           completionSignal: "</spec>",
         });
@@ -849,6 +876,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     promptArgs: {
       BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
       ISSUES: completedIssues.map((i) => `- ${i.id}: ${i.title}`).join("\n"),
+      VERIFY_COMMANDS: VERIFY_TEXT,
     },
   });
 

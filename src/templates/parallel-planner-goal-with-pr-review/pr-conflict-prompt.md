@@ -8,8 +8,7 @@ Branch {{BRANCH}} (checked out here) has merge conflicts with
 3. Resolve every conflict by reading both sides and choosing the correct
    resolution — preserve the intent of BOTH the branch changes and the
    {{TARGET_BRANCH}} changes.
-4. Run `npm run typecheck` and `npm run test`; fix failures caused by the
-   merge before finishing.
+4. Run {{VERIFY_COMMANDS}}; fix failures caused by the merge before finishing.
 5. Commit the merge. Do NOT push — the orchestrator pushes after you finish.
 
 Once complete, output <promise>COMPLETE</promise>.

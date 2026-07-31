@@ -616,18 +616,18 @@ describe("InitService scaffold", () => {
       expect(joined).toContain("npm run sandcastle");
     });
 
-    it("non-blank template includes a note about customizing the install command", () => {
+    it("non-blank template includes a note about the toolchain-detected install command", () => {
       const lines = next("simple-loop", "main.mts");
       const joined = lines.join("\n");
-      expect(joined).toContain("npm install");
-      expect(joined).toContain("onSandboxReady");
+      expect(joined).toContain("install command");
+      expect(joined).toContain("config.mts");
     });
 
-    it("non-blank template mentions copyToWorktree and node_modules", () => {
+    it("non-blank template mentions copyToWorktree and points at config.mts", () => {
       const lines = next("simple-loop", "main.mts");
       const joined = lines.join("\n");
       expect(joined).toContain("copyToWorktree");
-      expect(joined).toContain("node_modules");
+      expect(joined).toContain("config.mts");
     });
 
     it("blank template includes a step to customize prompt.md", () => {
@@ -788,6 +788,30 @@ describe("InitService scaffold", () => {
       const joined = lines.join("\n");
       expect(joined.toLowerCase()).toContain("host");
       expect(joined).toContain(getAgent("opencode")!.setupCommand);
+    });
+
+    it("next steps guide the defer path to the customize skill and always end with doctor (prd/007)", () => {
+      const tracker = getIssueTracker("github-issues")!;
+      const deferred = getNextStepsLines(
+        "parallel-planner-goal-with-pr-review",
+        "main.mts",
+        tracker,
+        claudeCodeAgent,
+        "npm",
+        { deferred: true },
+      ).join("\n");
+      expect(deferred).toContain("sandcastle-customize");
+      expect(deferred).toContain("npm run sandcastle:doctor");
+      const confirmed = getNextStepsLines(
+        "parallel-planner-goal-with-pr-review",
+        "main.mts",
+        tracker,
+        claudeCodeAgent,
+        "npm",
+        { deferred: false },
+      ).join("\n");
+      expect(confirmed).not.toContain("sandcastle-customize");
+      expect(confirmed).toContain("npm run sandcastle:doctor");
     });
   });
 
@@ -1439,6 +1463,72 @@ describe("InitService scaffold", () => {
       expect(spec).toContain("package.json");
     });
 
+    it("parallel-planner-with-pr-review derives TARGET_BRANCH (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-with-pr-review",
+      });
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      expect(mainTs).not.toContain('TARGET_BRANCH = "master"');
+      expect(mainTs).toMatch(/TARGET_BRANCH[\s\S]{0,240}rev-parse/);
+    });
+
+    it("prompts carry no hardcoded verify commands — {{VERIFY_COMMANDS}} instead (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const read = (f: string) =>
+        readFile(join(dir, ".sandcastle", f), "utf-8");
+      for (const file of [
+        "spec-prompt.md",
+        "merge-prompt.md",
+        "pr-conflict-prompt.md",
+        "pr-address-prompt.md",
+      ]) {
+        const content = await read(file);
+        // Tier-2 rule: repo-specific commands come from the knob, never the text.
+        expect(content, file).toContain("{{VERIFY_COMMANDS}}");
+        expect(content, file).not.toContain("npm run typecheck");
+        expect(content, file).not.toContain("npm run test");
+      }
+      // The scaffolded skill is copied, not run through run() — it defers to
+      // config.mts instead of carrying a placeholder.
+      const skill = await read("implementer-skill.md");
+      expect(skill).toContain("config.mts");
+      expect(skill).not.toContain("npm run typecheck");
+      // Every prompt with the placeholder gets the arg (fail-fast pairing).
+      const mainTs = await read("main.mts");
+      expect(mainTs.match(/VERIFY_COMMANDS: VERIFY_TEXT/g)?.length).toBe(4);
+    });
+
+    it("doctor checks verify commands; loop nudges on empty knob and non-default branch (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const setup = await readFile(
+        join(dir, ".sandcastle", "setup.mts"),
+        "utf-8",
+      );
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      // Doctor: empty knob nudges toward the customize skill; declared
+      // `<pm> run X` commands must exist in package.json scripts.
+      expect(setup).toContain("verify commands");
+      expect(setup).toContain("sandcastle-customize");
+      expect(setup).toContain("missingVerifyScripts");
+      // Loop startup: nudge (never gate) on empty knob and on a loop branch
+      // that differs from the repo's default branch.
+      expect(mainTs).toContain("warnEmptyVerifyCommands");
+      expect(mainTs).toContain("defaultBranchRef");
+    });
+
     it("doctor and main loop detect an uncommitted implementer skill", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {
@@ -1462,19 +1552,28 @@ describe("InitService scaffold", () => {
       expect(mainTs).toContain("without process rules");
     });
 
-    it("main.mts exposes the spec dir and goal knobs in the configuration block", async () => {
+    it("config.mts exposes the spec dir and goal knobs, and main.mts imports from it", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {
         templateName: "parallel-planner-goal-with-pr-review",
       });
 
+      const configMts = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      expect(configMts).toContain('SPEC_DIR = "specs"');
+      expect(configMts).toContain("GOAL_MAX_TURNS");
+      expect(configMts).toContain("IMPLEMENT_ATTEMPTS");
+
       const mainTs = await readFile(
         join(dir, ".sandcastle", "main.mts"),
         "utf-8",
       );
-      expect(mainTs).toContain('const SPEC_DIR = "specs"');
-      expect(mainTs).toContain("const GOAL_MAX_TURNS");
-      expect(mainTs).toContain("const IMPLEMENT_ATTEMPTS");
+      expect(mainTs).toContain("./config.mts");
+      expect(mainTs).toContain("SPEC_DIR");
+      expect(mainTs).toContain("GOAL_MAX_TURNS");
+      expect(mainTs).toContain("IMPLEMENT_ATTEMPTS");
     });
 
     it("main.mts runs the implementer in goal mode, not via implement-prompt", async () => {
@@ -1523,6 +1622,71 @@ describe("InitService scaffold", () => {
       );
       expect(setup).toContain(".claude/skills/sandcastle-implementer/SKILL.md");
       expect(setup).toContain("scaffoldImplementerSkill");
+    });
+
+    it("scaffolds the customize skill source and setup.mts installs it (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const files = await readdir(join(dir, ".sandcastle"));
+      expect(files).toContain("customize-skill.md");
+      const skill = await readFile(
+        join(dir, ".sandcastle", "customize-skill.md"),
+        "utf-8",
+      );
+      expect(skill).toContain("VERIFY_COMMANDS");
+      expect(skill).toContain("sandcastle:doctor");
+      const setup = await readFile(
+        join(dir, ".sandcastle", "setup.mts"),
+        "utf-8",
+      );
+      expect(setup).toContain(".claude/skills/sandcastle-customize/SKILL.md");
+    });
+
+    it("init itself scaffolds the customize skill — available before sandcastle:init (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      // The defer path points at the skill the moment init's next steps
+      // print — it cannot depend on sandcastle:init (which needs GitHub).
+      const skill = await readFile(
+        join(dir, ".claude", "skills", "sandcastle-customize", "SKILL.md"),
+        "utf-8",
+      );
+      expect(skill).toContain("VERIFY_COMMANDS");
+    });
+
+    it("never overwrites an existing customize skill (prd/007)", async () => {
+      const dir = await makeDir();
+      const skillPath = join(
+        dir,
+        ".claude",
+        "skills",
+        "sandcastle-customize",
+        "SKILL.md",
+      );
+      const { mkdir } = await import("node:fs/promises");
+      await mkdir(join(dir, ".claude", "skills", "sandcastle-customize"), {
+        recursive: true,
+      });
+      await writeFile(skillPath, "owner-customized content");
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      expect(await readFile(skillPath, "utf-8")).toBe(
+        "owner-customized content",
+      );
+    });
+
+    it("does not scaffold the customize skill for templates without toolchain config", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir); // blank template
+      const { access } = await import("node:fs/promises");
+      await expect(
+        access(join(dir, ".claude", "skills", "sandcastle-customize")),
+      ).rejects.toThrow();
     });
   });
 
@@ -2660,6 +2824,97 @@ describe("InitService scaffold", () => {
         'import { docker } from "@ai-hero/sandcastle/sandboxes/docker"',
       );
       expect(mainTs).toContain("sandbox: docker()");
+    });
+  });
+
+  describe("toolchain customization (prd/007)", () => {
+    const goalTemplate = {
+      templateName: "parallel-planner-goal-with-pr-review",
+    };
+
+    it("rewrites config.mts from the resolved toolchain", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        ...goalTemplate,
+        toolchain: {
+          name: "tauri",
+          installCommand: "pnpm install",
+          copyToWorktree: ["node_modules"],
+          verifyCommands: ["pnpm run typecheck", "pnpm run test:unit"],
+        },
+      });
+      const config = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      expect(config).toContain('TOOLCHAIN = "tauri"');
+      expect(config).toContain('INSTALL_COMMAND = "pnpm install"');
+      expect(config).toContain(
+        'VERIFY_COMMANDS = ["pnpm run typecheck", "pnpm run test:unit"]',
+      );
+    });
+
+    it("defer writes the sentinel: empty list + TODO comment", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        ...goalTemplate,
+        toolchain: {
+          name: "node",
+          installCommand: "npm install",
+          copyToWorktree: ["node_modules"],
+          verifyCommands: "defer",
+        },
+      });
+      const config = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      expect(config).toContain("VERIFY_COMMANDS: string[] = []");
+      expect(config).toContain("TODO(sandcastle)");
+      expect(config).toContain("sandcastle-customize");
+    });
+
+    it("no toolchain option leaves template defaults", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, goalTemplate);
+      const config = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      expect(config).toContain('TOOLCHAIN = "node"');
+      expect(config).toContain('INSTALL_COMMAND = "npm install"');
+    });
+
+    it("snapshots the scaffold to .template-base with a BASE.json marker", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, goalTemplate);
+      const baseDir = join(dir, ".sandcastle", ".template-base");
+      const baseFiles = await readdir(baseDir);
+      expect(baseFiles).toContain("config.mts");
+      expect(baseFiles).toContain("main.mts");
+      expect(baseFiles).toContain("BASE.json");
+      const marker = JSON.parse(
+        await readFile(join(baseDir, "BASE.json"), "utf-8"),
+      );
+      expect(marker.template).toBe("parallel-planner-goal-with-pr-review");
+      expect(typeof marker.sandcastleVersion).toBe("string");
+      // The ancestor matches what was scaffolded, byte for byte.
+      const scaffolded = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      const snapshot = await readFile(join(baseDir, "config.mts"), "utf-8");
+      expect(snapshot).toBe(scaffolded);
+    });
+
+    it("snapshots the blank template too (ancestor for every repo)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir); // blank
+      const baseFiles = await readdir(
+        join(dir, ".sandcastle", ".template-base"),
+      );
+      expect(baseFiles).toContain("BASE.json");
+      expect(baseFiles).toContain("prompt.md");
     });
   });
 });
