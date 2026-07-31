@@ -90,7 +90,13 @@ const MAX_DEBATE_ROUNDS = 3;
 // reviewer + local merge.
 const PR_LABEL = github.REQUIRE_PR_LABEL;
 
-const TARGET_BRANCH = "master";
+// The branch merges target and PRs diff against — derived from the branch
+// the loop runs on, never hardcoded: a "master" default silently stranded
+// every implemented branch on main-based repos (branchAhead was always
+// false, so nothing ever merged).
+const TARGET_BRANCH = (
+  await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"])
+).stdout.trim();
 
 const branchFor = (issueNumber: number) => `sandcastle/issue-${issueNumber}`;
 
@@ -668,7 +674,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   });
 
   // PR-mode branches fork from local HEAD but their PR diffs are computed
-  // against origin/master — keep the remote in sync with local merges.
+  // against the target branch — keep the remote in sync with local merges.
   await execFileAsync("git", ["push", "origin", TARGET_BRANCH]);
 
   console.log("\nBranches merged.");

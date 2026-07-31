@@ -1463,6 +1463,19 @@ describe("InitService scaffold", () => {
       expect(spec).toContain("package.json");
     });
 
+    it("parallel-planner-with-pr-review derives TARGET_BRANCH (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-with-pr-review",
+      });
+      const mainTs = await readFile(
+        join(dir, ".sandcastle", "main.mts"),
+        "utf-8",
+      );
+      expect(mainTs).not.toContain('TARGET_BRANCH = "master"');
+      expect(mainTs).toMatch(/TARGET_BRANCH[\s\S]{0,240}rev-parse/);
+    });
+
     it("prompts carry no hardcoded verify commands — {{VERIFY_COMMANDS}} instead (prd/007)", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {
