@@ -55,16 +55,24 @@ export const printHelp = (): void => {
 // live as a committed Claude Code skill that every sandbox checkout carries.
 // Written once, committed by the owner; never overwritten if present.
 const SKILL_PATH = ".claude/skills/sandcastle-implementer/SKILL.md";
+const CUSTOMIZE_SKILL_PATH = ".claude/skills/sandcastle-customize/SKILL.md";
 
-export const scaffoldImplementerSkill = (): "created" | "exists" => {
-  if (existsSync(SKILL_PATH)) return "exists";
-  const source = fileURLToPath(
-    new URL("./implementer-skill.md", import.meta.url),
-  );
-  mkdirSync(dirname(SKILL_PATH), { recursive: true });
-  writeFileSync(SKILL_PATH, readFileSync(source, "utf8"));
+const scaffoldSkill = (
+  targetPath: string,
+  sourceFile: string,
+): "created" | "exists" => {
+  if (existsSync(targetPath)) return "exists";
+  const source = fileURLToPath(new URL(sourceFile, import.meta.url));
+  mkdirSync(dirname(targetPath), { recursive: true });
+  writeFileSync(targetPath, readFileSync(source, "utf8"));
   return "created";
 };
+
+export const scaffoldImplementerSkill = (): "created" | "exists" =>
+  scaffoldSkill(SKILL_PATH, "./implementer-skill.md");
+
+export const scaffoldCustomizeSkill = (): "created" | "exists" =>
+  scaffoldSkill(CUSTOMIZE_SKILL_PATH, "./customize-skill.md");
 
 export const runInit = async (): Promise<void> => {
   const repo = await github.repoSlug();
@@ -75,6 +83,13 @@ export const runInit = async (): Promise<void> => {
     skill === "created"
       ? `Wrote ${SKILL_PATH} — commit it so implementer sandboxes pick it up.`
       : `${SKILL_PATH} already exists — left untouched.`,
+  );
+
+  const customize = scaffoldCustomizeSkill();
+  console.log(
+    customize === "created"
+      ? `Wrote ${CUSTOMIZE_SKILL_PATH} — run it from your coding agent to tune verify commands; commit it with the scaffold.`
+      : `${CUSTOMIZE_SKILL_PATH} already exists — left untouched.`,
   );
 
   console.log(`Sandcastle labels in ${repo}:\n`);

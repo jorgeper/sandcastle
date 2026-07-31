@@ -1586,6 +1586,26 @@ describe("InitService scaffold", () => {
       expect(setup).toContain(".claude/skills/sandcastle-implementer/SKILL.md");
       expect(setup).toContain("scaffoldImplementerSkill");
     });
+
+    it("scaffolds the customize skill source and setup.mts installs it (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      const files = await readdir(join(dir, ".sandcastle"));
+      expect(files).toContain("customize-skill.md");
+      const skill = await readFile(
+        join(dir, ".sandcastle", "customize-skill.md"),
+        "utf-8",
+      );
+      expect(skill).toContain("VERIFY_COMMANDS");
+      expect(skill).toContain("sandcastle:doctor");
+      const setup = await readFile(
+        join(dir, ".sandcastle", "setup.mts"),
+        "utf-8",
+      );
+      expect(setup).toContain(".claude/skills/sandcastle-customize/SKILL.md");
+    });
   });
 
   describe("PRD workflow scaffold", () => {
