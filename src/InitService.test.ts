@@ -1491,19 +1491,28 @@ describe("InitService scaffold", () => {
       expect(mainTs).toContain("without process rules");
     });
 
-    it("main.mts exposes the spec dir and goal knobs in the configuration block", async () => {
+    it("config.mts exposes the spec dir and goal knobs, and main.mts imports from it", async () => {
       const dir = await makeDir();
       await runScaffold(dir, {
         templateName: "parallel-planner-goal-with-pr-review",
       });
 
+      const configMts = await readFile(
+        join(dir, ".sandcastle", "config.mts"),
+        "utf-8",
+      );
+      expect(configMts).toContain('SPEC_DIR = "specs"');
+      expect(configMts).toContain("GOAL_MAX_TURNS");
+      expect(configMts).toContain("IMPLEMENT_ATTEMPTS");
+
       const mainTs = await readFile(
         join(dir, ".sandcastle", "main.mts"),
         "utf-8",
       );
-      expect(mainTs).toContain('const SPEC_DIR = "specs"');
-      expect(mainTs).toContain("const GOAL_MAX_TURNS");
-      expect(mainTs).toContain("const IMPLEMENT_ATTEMPTS");
+      expect(mainTs).toContain("./config.mts");
+      expect(mainTs).toContain("SPEC_DIR");
+      expect(mainTs).toContain("GOAL_MAX_TURNS");
+      expect(mainTs).toContain("IMPLEMENT_ATTEMPTS");
     });
 
     it("main.mts runs the implementer in goal mode, not via implement-prompt", async () => {
