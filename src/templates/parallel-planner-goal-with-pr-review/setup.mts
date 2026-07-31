@@ -75,9 +75,8 @@ export const scaffoldCustomizeSkill = (): "created" | "exists" =>
   scaffoldSkill(CUSTOMIZE_SKILL_PATH, "./customize-skill.md");
 
 export const runInit = async (): Promise<void> => {
-  const repo = await github.repoSlug();
-  const created = await github.ensureLabelsExist(github.ALL_LABEL_DEFS);
-
+  // Scaffold the local skills BEFORE any GitHub call: a bad token or missing
+  // remote must not strand purely local scaffolding (nudges-not-gates).
   const skill = scaffoldImplementerSkill();
   console.log(
     skill === "created"
@@ -91,6 +90,9 @@ export const runInit = async (): Promise<void> => {
       ? `Wrote ${CUSTOMIZE_SKILL_PATH} — run it from your coding agent to tune verify commands; commit it with the scaffold.`
       : `${CUSTOMIZE_SKILL_PATH} already exists — left untouched.`,
   );
+
+  const repo = await github.repoSlug();
+  const created = await github.ensureLabelsExist(github.ALL_LABEL_DEFS);
 
   console.log(`Sandcastle labels in ${repo}:\n`);
   for (const [name, on, by, meaning] of LABEL_ROWS) {

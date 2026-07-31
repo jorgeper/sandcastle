@@ -1643,6 +1643,51 @@ describe("InitService scaffold", () => {
       );
       expect(setup).toContain(".claude/skills/sandcastle-customize/SKILL.md");
     });
+
+    it("init itself scaffolds the customize skill — available before sandcastle:init (prd/007)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      // The defer path points at the skill the moment init's next steps
+      // print — it cannot depend on sandcastle:init (which needs GitHub).
+      const skill = await readFile(
+        join(dir, ".claude", "skills", "sandcastle-customize", "SKILL.md"),
+        "utf-8",
+      );
+      expect(skill).toContain("VERIFY_COMMANDS");
+    });
+
+    it("never overwrites an existing customize skill (prd/007)", async () => {
+      const dir = await makeDir();
+      const skillPath = join(
+        dir,
+        ".claude",
+        "skills",
+        "sandcastle-customize",
+        "SKILL.md",
+      );
+      const { mkdir } = await import("node:fs/promises");
+      await mkdir(join(dir, ".claude", "skills", "sandcastle-customize"), {
+        recursive: true,
+      });
+      await writeFile(skillPath, "owner-customized content");
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+      expect(await readFile(skillPath, "utf-8")).toBe(
+        "owner-customized content",
+      );
+    });
+
+    it("does not scaffold the customize skill for templates without toolchain config", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir); // blank template
+      const { access } = await import("node:fs/promises");
+      await expect(
+        access(join(dir, ".claude", "skills", "sandcastle-customize")),
+      ).rejects.toThrow();
+    });
   });
 
   describe("PRD workflow scaffold", () => {

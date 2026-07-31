@@ -732,7 +732,7 @@ export function getNextStepsLines(
     if (template === "parallel-planner-goal-with-pr-review") {
       if (verify?.deferred) {
         lines.push(
-          `${step++}. Verify commands are DEFERRED — after \`npm run sandcastle:init\`, run the "sandcastle-customize" skill from your coding agent in this repo to set them (agents can't verify their work until then)`,
+          `${step++}. Verify commands are DEFERRED — run the "sandcastle-customize" skill from your coding agent in this repo to set them (agents can't verify their work until then)`,
         );
       }
       lines.push(
@@ -1234,6 +1234,35 @@ export const scaffold = (
       createLabel
     ) {
       yield* scaffoldPrdWorkflow(repoDir);
+    }
+
+    // The customize skill must exist the moment init finishes: deferring
+    // verify commands points the owner straight at it, and `sandcastle:init`
+    // (which also scaffolds it) talks to GitHub first — a bad token would
+    // strand the guided next step (prd/007; same CLI-time precedent as the
+    // PRD-workflow skills). Never overwritten if present.
+    if (templateHasToolchainConfig(templateName)) {
+      const customizeSkillPath = join(
+        repoDir,
+        ".claude",
+        "skills",
+        "sandcastle-customize",
+        "SKILL.md",
+      );
+      const customizeSkillExists = yield* fs
+        .exists(customizeSkillPath)
+        .pipe(Effect.orElseSucceed(() => false));
+      if (!customizeSkillExists) {
+        const skillSource = yield* fs
+          .readFileString(join(templateDir, "customize-skill.md"))
+          .pipe(Effect.mapError((e) => new Error(e.message)));
+        yield* fs
+          .makeDirectory(dirname(customizeSkillPath), { recursive: true })
+          .pipe(Effect.mapError((e) => new Error(e.message)));
+        yield* fs
+          .writeFileString(customizeSkillPath, skillSource)
+          .pipe(Effect.mapError((e) => new Error(e.message)));
+      }
     }
 
     // For the custom issue tracker, drop the setup prompt the user feeds to
