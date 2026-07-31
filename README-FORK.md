@@ -6,6 +6,33 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Per-repo customization: toolchain profiles + verify commands (`feat/repo-customization`)
+
+The goal template hardcoded npm everywhere it mattered — `npm install`
+in `onSandboxReady`, `node_modules` in `copyToWorktree`, and
+`npm run typecheck`/`npm run test` in four prompts, which once let the
+spec writer target a script that didn't exist. Now (prd/007, issue #10):
+knobs live in `.sandcastle/config.mts` (TS consts imported by both
+`main.mts` and `setup.mts`), and init detects a toolchain profile
+(node, react-web, tauri, go, python) from manifests, proposes verify
+commands scanned from the repo's real scripts, and asks
+confirm / edit / detect later.
+
+Onboarding sequence: (1) `npx sandcastle init` — confirm the detected
+verify commands and the skill is never needed; defer and a
+`VERIFY_COMMANDS = []` sentinel is written. (2) Init's next-steps are
+path-aware: on defer they say to run the scaffolded
+`sandcastle-customize` skill in Claude Code; they always end with
+`npm run sandcastle:doctor`. (3) The skill inspects the repo, proposes
+verify commands with reasoning, edits `config.mts` on approval, and
+points at doctor when done. (4) Doctor nudges while the sentinel
+remains and fails loud when a declared `npm run X` has no matching
+script. (5) The loop's startup guard warns when running on a
+non-default branch. Init also snapshots the pristine scaffold to
+`.sandcastle/.template-base/` — the ancestor for a future three-way
+`sandcastle update`. Sibling fix: `parallel-planner-with-pr-review`
+now derives `TARGET_BRANCH` instead of hardcoding `"master"`.
+
 ## Image-gap nudge (`feat/image-gap-nudge`)
 
 Installs inside a sandbox die with the container — an implementer that
