@@ -523,15 +523,23 @@ const runPrdLane = async (): Promise<void> => {
   }
   if (issues.length === 0) return;
 
-  const repo = await github.repoSlug();
-  const prHeads = (await github.listAllPrHeads()) as PrdPrHead[];
+  let repo: string;
+  let prHeads: PrdPrHead[];
+  try {
+    repo = await github.repoSlug();
+    prHeads = (await github.listAllPrHeads()) as PrdPrHead[];
+  } catch (error) {
+    console.warn(
+      `⚠ PRD lane unavailable this run: ${error instanceof Error ? error.message.split("\n", 1)[0] : error}`,
+    );
+    return;
+  }
   const nudges: string[] = [];
 
   for (const issue of issues) {
     const head = findPrdPr(prHeads, issue.number);
     // API errors mean "state unknown" — report, never guess (prd/008).
     let action: ReturnType<typeof classifyPrdIssue>;
-    let mergedPrNumber = head?.state === "MERGED" ? head.number : null;
     try {
       const pr =
         head === null
@@ -567,57 +575,68 @@ const runPrdLane = async (): Promise<void> => {
       );
       try {
         await github.mergePr(action.pr);
-        mergedPrNumber = action.pr;
       } catch (error) {
         nudges.push(
-          `PRD PR #${action.pr} (issue #${issue.number}) is approved but the merge failed — resolve and re-run.`,
+          `PRD PR #${action.pr} (issue #${issue.number}) is approved but the merge failed (${error instanceof Error ? error.message.split("\n", 1)[0] : error}) — resolve and re-run.`,
         );
         continue;
       }
     }
 
     if (action.kind === "merge-and-decompose" || action.kind === "decompose") {
-      const prNumber = mergedPrNumber ?? (action as { pr: number }).pr;
-      const prdPath = prdPathFromPrFiles(await github.prFilesJson(prNumber));
-      if (prdPath === null) {
-        nudges.push(
-          `PRD PR #${prNumber} (issue #${issue.number}) merged but no prd/*.md among its files — decompose manually.`,
+      const prNumber = action.pr;
+      // An uncaught failure here (bad PR data, a stale local checkout, or a
+      // decomposer PromptError) must never take the whole run down — same
+      // precedent as the merger call site below.
+      let step = "reading PR files";
+      try {
+        const prdPath = prdPathFromPrFiles(await github.prFilesJson(prNumber));
+        if (prdPath === null) {
+          nudges.push(
+            `PRD PR #${prNumber} (issue #${issue.number}) merged but no prd/*.md among its files — decompose manually.`,
+          );
+          continue;
+        }
+        // The decomposer reads the PRD from the default branch — sync first.
+        step = "syncing the default branch";
+        await execFileAsync("git", [
+          "pull",
+          "--ff-only",
+          "origin",
+          TARGET_BRANCH,
+        ]);
+        step = "running the decomposer";
+        const decomposerModel = "claude-opus-4-8";
+        await timed("decomposer", { issue: issue.number }, () =>
+          sandcastle.run({
+            hooks,
+            sandbox: docker(),
+            name: "decomposer",
+            maxIterations: 1,
+            agent: sandcastle.claudeCode(decomposerModel),
+            promptFile: "./.sandcastle/decompose-prompt.md",
+            promptArgs: {
+              PARENT_NUMBER: issue.number,
+              PARENT_TITLE: issue.title,
+              PRD_PATH: prdPath,
+              REPO: repo,
+              AGENT_MARKER: markerFor(
+                "decomposer",
+                "claude-code",
+                decomposerModel,
+              ),
+              TRIGGER_LABEL: github.TRIGGER_LABEL,
+            },
+          }),
         );
-        continue;
+        console.log(
+          `  #${issue.number}: decomposed — sub-issues enter this run's implement lane.`,
+        );
+      } catch (error) {
+        nudges.push(
+          `PRD PR #${prNumber} (issue #${issue.number}): ${step} failed (${error instanceof Error ? error.message.split("\n", 1)[0] : error}) — resolve and re-run.`,
+        );
       }
-      // The decomposer reads the PRD from the default branch — sync first.
-      await execFileAsync("git", [
-        "pull",
-        "--ff-only",
-        "origin",
-        TARGET_BRANCH,
-      ]);
-      const decomposerModel = "claude-opus-4-8";
-      await timed("decomposer", { issue: issue.number }, () =>
-        sandcastle.run({
-          hooks,
-          sandbox: docker(),
-          name: "decomposer",
-          maxIterations: 1,
-          agent: sandcastle.claudeCode(decomposerModel),
-          promptFile: "./.sandcastle/decompose-prompt.md",
-          promptArgs: {
-            PARENT_NUMBER: issue.number,
-            PARENT_TITLE: issue.title,
-            PRD_PATH: prdPath,
-            REPO: repo,
-            AGENT_MARKER: markerFor(
-              "decomposer",
-              "claude-code",
-              decomposerModel,
-            ),
-            TRIGGER_LABEL: github.TRIGGER_LABEL,
-          },
-        }),
-      );
-      console.log(
-        `  #${issue.number}: decomposed — sub-issues enter this run's implement lane.`,
-      );
       continue;
     }
 
