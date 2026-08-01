@@ -8,8 +8,9 @@ For each branch:
 
 1. Run `git merge <branch> --no-edit`
 2. If there are merge conflicts, resolve them intelligently by reading both sides and choosing the correct resolution
-3. After resolving conflicts, run {{VERIFY_COMMANDS}} to verify everything works
-4. If tests fail, fix the issues before proceeding to the next branch
+3. If the merge was a clean FAST-FORWARD, skip verification for that branch: the resulting tree is byte-identical to the branch tip, which the implementer's final gate already verified — re-running the suite proves nothing and wastes minutes
+4. Otherwise (a real merge commit, with or without conflicts), run {{VERIFY_COMMANDS}} to verify everything works
+5. If tests fail, fix the issues before proceeding to the next branch
 
 After all branches are merged, make a single commit summarizing the merge.
 
@@ -22,7 +23,7 @@ For each branch that was merged, first leave a single comment on its issue recor
 Lead the comment with `🏰 **Sandcastle · Merger**`, then keep it concise:
 
 - **Merged:** `<branch>` → the current branch
-- **Tests:** the result of {{VERIFY_COMMANDS}}
+- **Tests:** the result of {{VERIFY_COMMANDS}} — or "fast-forward; already gated on the branch" when verification was skipped per the rule above
 
 Then close the issue using the following command:
 

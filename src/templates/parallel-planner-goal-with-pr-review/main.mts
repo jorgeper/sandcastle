@@ -666,21 +666,40 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     break;
   }
 
-  const plan = await timed("planner", { candidates: candidates.length }, () =>
-    sandcastle.run({
-      hooks,
-      sandbox: docker(),
-      name: "planner",
-      // One iteration is enough: the planner just needs to read and reason.
-      maxIterations: 1,
-      agent: sandcastle.claudeCode("claude-opus-4-8"),
-      promptFile: "./.sandcastle/plan-prompt.md",
-      promptArgs: { CANDIDATE_NUMBERS: candidates.join(", ") },
-      output: sandcastle.Output.object({ tag: "plan", schema: planSchema }),
-    }),
-  );
+  // One candidate needs no planner: a full docker+model run whose only job
+  // is choosing among issues has nothing to choose. Dispatch it directly.
+  const issues =
+    candidates.length === 1
+      ? [
+          {
+            id: String(candidates[0]!),
+            title: dispatch.find((e) => e.issue.number === candidates[0])!
+              .issue.title,
+            branch: branchFor(candidates[0]!),
+          },
+        ]
+      : (
+          await timed("planner", { candidates: candidates.length }, () =>
+            sandcastle.run({
+              hooks,
+              sandbox: docker(),
+              name: "planner",
+              // One iteration is enough: the planner just needs to read and reason.
+              maxIterations: 1,
+              agent: sandcastle.claudeCode("claude-opus-4-8"),
+              promptFile: "./.sandcastle/plan-prompt.md",
+              promptArgs: { CANDIDATE_NUMBERS: candidates.join(", ") },
+              output: sandcastle.Output.object({
+                tag: "plan",
+                schema: planSchema,
+              }),
+            }),
+          )
+        ).output.issues;
 
-  const issues = plan.output.issues;
+  if (candidates.length === 1) {
+    logStep(`Single candidate #${candidates[0]} — skipping planner.`);
+  }
 
   if (issues.length === 0) {
     console.log("No unblocked issues to work on. Exiting.");

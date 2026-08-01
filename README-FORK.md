@@ -6,6 +6,18 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Loop efficiency: three wall-clock leaks (`feat/loop-efficiency`)
+
+Timing data from the playground showed three recurring leaks: the merger
+re-ran the full verify suite after FAST-FORWARD merges (tree identical
+to the branch tip the implementer just gated — ~3 min wasted per merged
+issue); the planner spent a full docker+model round choosing among ONE
+candidate; and an implementer backgrounded its final gate and ended its
+turn ("waiting for the notification"), which in a headless run ends the
+session — suite orphaned, attempt wasted. Fixes: merge prompt skips
+verification for fast-forward merges, main.ts dispatches a single
+candidate directly, and the implementer skill mandates foreground gates.
+
 ## Merged-issue close safety net (`feat/merged-issue-safety-net`)
 
 Issue #14 in the playground looped forever: an earlier merger run merged
