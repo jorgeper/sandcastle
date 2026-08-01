@@ -1743,6 +1743,25 @@ describe("InitService scaffold", () => {
       });
       expect(await exists(join(dir, "prd", "TEMPLATE.md"))).toBe(false);
     });
+
+    it("scaffolds the issue-anchored new-prd skill for the goal template (github + label)", async () => {
+      const dir = await makeDir();
+      await runScaffold(dir, {
+        templateName: "parallel-planner-goal-with-pr-review",
+      });
+
+      const newPrd = await readFile(
+        join(dir, ".claude", "skills", "new-prd", "SKILL.md"),
+        "utf-8",
+      );
+      expect(newPrd).toContain("sandcastle:requires-prd");
+      // No decompose-prd skill in this template — the orchestrator decomposes.
+      expect(
+        await exists(
+          join(dir, ".claude", "skills", "decompose-prd", "SKILL.md"),
+        ),
+      ).toBe(false);
+    });
   });
 
   // --- Issue tracker ---
