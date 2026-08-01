@@ -6,6 +6,20 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Merged-issue close safety net (`feat/merged-issue-safety-net`)
+
+Issue #14 in the playground looped forever: an earlier merger run merged
+its branch but missed the issue close, so every cycle the classifier
+re-dispatched the implementer, which re-ran the full verify gate to
+prove "already done" — no path ever closed the issue. Three
+derive-from-git fixes in the goal template: goal-met + zero new commits
+
+- branch fully merged now closes the issue host-side; the merge phase
+  verifies each actually-merged issue ended up closed (and closes it
+  deterministically if the merger agent missed it); and PR mode ships the
+  branch delta vs the target, so commits from prior attempts still get
+  their PR opened instead of returning early.
+
 ## Quick-tier-only baselines (`feat/quick-baseline-policy`)
 
 First run with tiering showed implementers running the full suite at
