@@ -6,6 +6,17 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Still-running heartbeat (`feat/phase-heartbeat`)
+
+With four issues in flight, the console went silent for 8+ minutes
+after the first two reviewers finished — the remaining implementers
+were quietly working in their log files, but the silence read as a hang
+(and got "fixed" by killing live agents mid-run, costing a 21-minute
+attempt). `timed()` now tracks active phases and prints
+`⏳ still running: implementer(issue=22) 12.3m, …` every two minutes
+while anything is active; the interval is unref'd so it never keeps the
+process alive.
+
 ## Image-gap evidence scoped to the current image (`feat/install-scan-staleness`)
 
 Doctor kept demanding a Dockerfile line the owner had already added:
