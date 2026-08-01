@@ -187,10 +187,12 @@ export interface LabelDef {
 
 export const TRIGGER_LABEL = "sandcastle";
 export const REQUIRE_PR_LABEL = "sandcastle:require-pr";
+export const REQUIRES_PRD_LABEL = "sandcastle:requires-prd";
 
 export const TRIGGER_LABEL_DEFS: LabelDef[] = [
   { name: TRIGGER_LABEL, color: "1D76DB", desc: "Queue this issue for the sandcastle loop" },
   { name: REQUIRE_PR_LABEL, color: "0052CC", desc: "Gate this issue behind a PR + outer review" },
+  { name: REQUIRES_PRD_LABEL, color: "B60205", desc: "Needs an approved PRD before decompose/implement" },
 ];
 
 export type StatusLabel =
