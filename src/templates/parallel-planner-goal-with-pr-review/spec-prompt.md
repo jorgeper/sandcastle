@@ -57,6 +57,11 @@ Rules for the goal statement and acceptance criteria:
 - Always include these two criteria: {{VERIFY_COMMANDS}} pass (run in the
   implementer's session), and a summary comment from the implementer exists
   on issue #{{TASK_ID}}.
+- Test economy: in the spec's acceptance criteria, tell the implementer to
+  iterate with {{QUICK_VERIFY_COMMANDS}} (or tests targeted at the changed
+  code) and to run the full gate above ONCE, right before declaring the
+  goal met — not after every small change. Full-suite runs are usually the
+  single largest time cost of an attempt.
 - Keep the goal statement under 1,500 characters; detail belongs in the
   acceptance criteria, which the file carries.
 - Any command the goal or criteria reference MUST exist: check

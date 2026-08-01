@@ -8,7 +8,13 @@ description: Detect this repo's toolchain and set Sandcastle's verify commands (
 You are configuring the Tier-2 knobs in `.sandcastle/config.mts` — the
 single place Sandcastle's agents learn how to install and verify in this
 repo. v1 scope: the toolchain block (`TOOLCHAIN`, `INSTALL_COMMAND`,
-`COPY_TO_WORKTREE`, `VERIFY_COMMANDS`).
+`COPY_TO_WORKTREE`, `VERIFY_COMMANDS`, `QUICK_VERIFY_COMMANDS`).
+
+`QUICK_VERIFY_COMMANDS` is the fast inner-loop subset (typecheck + unit
+tests, no e2e/browser suites) agents run while iterating; the full
+`VERIFY_COMMANDS` runs once before work is declared done. Leave it empty
+to disable tiering. The `sandcastle-analyze` skill proposes values from
+actual run timing data.
 
 ## 1. Inspect the repo
 

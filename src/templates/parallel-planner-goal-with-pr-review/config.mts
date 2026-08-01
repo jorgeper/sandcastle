@@ -55,3 +55,11 @@ export const COPY_TO_WORKTREE = ["node_modules"];
 // nuance (e.g. "test:e2e is too slow for the inner loop") belongs in your
 // CLAUDE.md/AGENTS.md, which agents read and which overrides this list.
 export const VERIFY_COMMANDS = ["npm run typecheck", "npm run test"];
+
+// Inner-loop subset of VERIFY_COMMANDS: what agents run while iterating
+// (after each change), as opposed to the full suite they must pass once
+// before declaring work done. Keep it fast — typecheck + unit tests, no
+// e2e/browser suites. Empty (the default) means "same as VERIFY_COMMANDS",
+// i.e. no tiering. The `sandcastle-analyze` skill proposes values for this
+// from timing data.
+export const QUICK_VERIFY_COMMANDS: string[] = [];
