@@ -30,7 +30,11 @@ Rules:
   each requirement lands in exactly one sub-issue.
 
 Create the sub-issues in dependency order, so earlier siblings' numbers
-can be referenced in `Blocked by` lines:
+can be referenced in `Blocked by` lines. Link each sub-issue to the parent
+IMMEDIATELY after creating it, before moving on to the next one — a crash
+between creation and linking would otherwise leave a labeled, unlinked
+child that the next run's sub_issues-based idempotency check can't see,
+causing it to re-create everything from scratch:
 
 ```
 gh issue create --title "<sub-issue title>" --label "{{TRIGGER_LABEL}}" --body "**Parent:** #{{PARENT_NUMBER}}
@@ -46,8 +50,8 @@ Blocked by #<earlier sibling number>"
 Omit the `Blocked by` line for unblocked sub-issues. The `**Parent:**` and
 `**PRD:**` lines are load-bearing: downstream agents read them.
 
-Then link each sub-issue to the parent via the sub-issue API (it takes the
-child's database id, not its number):
+Then, before creating the next sub-issue, link this one to the parent via
+the sub-issue API (it takes the child's database id, not its number):
 
 ```
 CHILD_ID=$(gh api repos/{{REPO}}/issues/<child number> --jq .id)

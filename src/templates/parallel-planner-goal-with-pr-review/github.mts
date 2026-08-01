@@ -86,11 +86,20 @@ export const listAllPrHeads = async (): Promise<
   return JSON.parse(raw);
 };
 
+// Capped at 100 sub-issues (GitHub's max per_page) — a parent past that is
+// not expected in practice. Deliberately per_page, not --paginate: gh
+// concatenates multi-page results into back-to-back JSON arrays, which
+// would break parseSubIssues' single JSON.parse.
 export const subIssuesJson = (
   repo: string,
   issueNumber: number,
 ): Promise<string> =>
-  gh(["api", `repos/${repo}/issues/${issueNumber}/sub_issues`]);
+  gh([
+    "api",
+    `repos/${repo}/issues/${issueNumber}/sub_issues`,
+    "-F",
+    "per_page=100",
+  ]);
 
 export const prApprovalJson = (prNumber: number): Promise<string> =>
   gh(["pr", "view", String(prNumber), "--json", "labels,reviewDecision"]);

@@ -186,7 +186,9 @@ remove the label:
 
 On agreement, also comment on the issue explaining the de-escalation, add
 any acceptance criteria you learned, and stop — the plain implement lane
-picks it up.
+picks it up. Confirm the issue still carries the \`Sandcastle\` label after
+de-escalation (removing \`sandcastle:requires-prd\` alone does not queue
+it); if missing, tell the user to add it.
 
 ## 3. Grill
 

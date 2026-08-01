@@ -661,7 +661,7 @@ const runPrdLane = async (): Promise<void> => {
       );
     if (action.kind === "abandoned")
       nudges.push(
-        `PRD PR #${action.pr} (issue #${issue.number}) was closed without merging — reopen it, or run /new-prd for a fresh PRD.`,
+        `PRD PR #${action.pr} (issue #${issue.number}) was closed without merging — reopen the PR, or run /new-prd ${issue.number} for a fresh PRD (the picker skips issues that already had a PRD PR).`,
       );
   }
 
