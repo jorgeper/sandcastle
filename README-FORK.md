@@ -6,6 +6,22 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Prompt-arg tripwire + merger crash fix (`feat/task-command-args`)
+
+Syncing the goal template's merge-prompt into the playground exposed a
+latent template bug: merge/review/plan prompts reference
+`{{COMMENT_TASK_COMMAND}}`-family placeholders that `main.mts` never
+passed, so a fresh scaffold crashed with an uncaught PromptError — and
+the merger's crash killed the entire loop process. Fixes: the gh
+command literals are passed (centralized consts, one place to change
+for a different tracker), the merger phase catches failures and lets
+the next cycle retry from git state, and a tripwire test asserts every
+prompt placeholder has a matching promptArgs entry (it immediately
+caught the planner's unpassed `{{LIST_TASKS_COMMAND}}` as well). The
+reviewer prompt also drops its blanket "run tests": no changes means no
+tests; committed refinements verify with the quick tier plus targeted
+tests, never the full suite.
+
 ## Loop efficiency: three wall-clock leaks (`feat/loop-efficiency`)
 
 Timing data from the playground showed three recurring leaks: the merger
