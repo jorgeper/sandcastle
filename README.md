@@ -224,6 +224,8 @@ const result = await run({
   },
 
   // How to record progress. Default: write to a file under .sandcastle/logs/
+  // Every line in the file is prefixed with a [HH:MM:SS] UTC timestamp, so
+  // gaps between entries show how long each step took.
   logging: {
     type: "file",
     path: ".sandcastle/logs/my-run.log",

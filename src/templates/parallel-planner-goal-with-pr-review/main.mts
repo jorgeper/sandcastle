@@ -55,6 +55,7 @@ import {
   type ThreadState,
 } from "./state.mts";
 import * as github from "./github.mts";
+import { logStep, timed } from "./timing.mts";
 import { printHelp, runDoctor, runInit } from "./setup.mts";
 import {
   COPY_TO_WORKTREE,
@@ -321,38 +322,42 @@ const runDebate = async (
       reviewerTurns += 1;
       const finalRound = reviewerTurns >= MAX_DEBATE_ROUNDS;
       const model = "claude-opus-4-8";
-      await sandbox.run({
-        name: "pr-reviewer",
-        maxIterations: 1,
-        agent: sandcastle.claudeCode(model),
-        promptFile: "./.sandcastle/pr-review-prompt.md",
-        promptArgs: {
-          AGENT_NAME: "pr-reviewer",
-          AGENT_MARKER: markerFor("pr-reviewer", "claude-code", model),
-          PR_NUMBER: prNumber,
-          REPO: repo,
-          THREADS_JSON: threadsJson,
-          FINAL_ROUND: String(finalRound),
-        },
-      });
+      await timed("pr-reviewer", { pr: prNumber, round: reviewerTurns }, () =>
+        sandbox.run({
+          name: "pr-reviewer",
+          maxIterations: 1,
+          agent: sandcastle.claudeCode(model),
+          promptFile: "./.sandcastle/pr-review-prompt.md",
+          promptArgs: {
+            AGENT_NAME: "pr-reviewer",
+            AGENT_MARKER: markerFor("pr-reviewer", "claude-code", model),
+            PR_NUMBER: prNumber,
+            REPO: repo,
+            THREADS_JSON: threadsJson,
+            FINAL_ROUND: String(finalRound),
+          },
+        }),
+      );
       if (finalRound) break;
     } else {
       const model = "claude-opus-4-8";
-      await sandbox.run({
-        name: "addresser",
-        maxIterations: 25,
-        agent: sandcastle.claudeCode(model),
-        promptFile: "./.sandcastle/pr-address-prompt.md",
-        promptArgs: {
-          AGENT_NAME: "addresser",
-          AGENT_MARKER: markerFor("addresser", "claude-code", model),
-          PR_NUMBER: prNumber,
-          REPO: repo,
-          THREADS_JSON: threadsJson,
-          BRANCH: branch,
-          VERIFY_COMMANDS: VERIFY_TEXT,
-        },
-      });
+      await timed("addresser", { pr: prNumber }, () =>
+        sandbox.run({
+          name: "addresser",
+          maxIterations: 25,
+          agent: sandcastle.claudeCode(model),
+          promptFile: "./.sandcastle/pr-address-prompt.md",
+          promptArgs: {
+            AGENT_NAME: "addresser",
+            AGENT_MARKER: markerFor("addresser", "claude-code", model),
+            PR_NUMBER: prNumber,
+            REPO: repo,
+            THREADS_JSON: threadsJson,
+            BRANCH: branch,
+            VERIFY_COMMANDS: VERIFY_TEXT,
+          },
+        }),
+      );
       await pushBranch(sandbox.worktreePath, branch);
     }
 
@@ -471,7 +476,9 @@ await nudgeConversationalLanes();
 const LOOP_START_MS = Date.now();
 
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
-  console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
+  console.log();
+  logStep(`=== Iteration ${iteration}/${MAX_ITERATIONS} ===`);
+  console.log();
 
   const openIssues = await github.listSandcastleIssues();
   if (openIssues.length === 0) {
@@ -548,20 +555,22 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
       copyToWorktree,
     });
     try {
-      await sandbox.run({
-        name: "conflict-resolver",
-        maxIterations: 10,
-        agent: sandcastle.claudeCode("claude-opus-4-8"),
-        promptFile: "./.sandcastle/pr-conflict-prompt.md",
-        // TARGET_BRANCH is a built-in prompt arg (injected by run()) —
-        // passing it in promptArgs is a PromptError that kills the run
-        // before it logs anything.
-        promptArgs: {
-          AGENT_NAME: "conflict-resolver",
-          BRANCH: branch,
-          VERIFY_COMMANDS: VERIFY_TEXT,
-        },
-      });
+      await timed("conflict-resolver", { pr: entry.snapshot!.number }, () =>
+        sandbox.run({
+          name: "conflict-resolver",
+          maxIterations: 10,
+          agent: sandcastle.claudeCode("claude-opus-4-8"),
+          promptFile: "./.sandcastle/pr-conflict-prompt.md",
+          // TARGET_BRANCH is a built-in prompt arg (injected by run()) —
+          // passing it in promptArgs is a PromptError that kills the run
+          // before it logs anything.
+          promptArgs: {
+            AGENT_NAME: "conflict-resolver",
+            BRANCH: branch,
+            VERIFY_COMMANDS: VERIFY_TEXT,
+          },
+        }),
+      );
       await pushBranch(sandbox.worktreePath, branch);
       // Merge is picked up by the next iteration's classification pass.
     } finally {
@@ -629,17 +638,19 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     break;
   }
 
-  const plan = await sandcastle.run({
-    hooks,
-    sandbox: docker(),
-    name: "planner",
-    // One iteration is enough: the planner just needs to read and reason.
-    maxIterations: 1,
-    agent: sandcastle.claudeCode("claude-opus-4-8"),
-    promptFile: "./.sandcastle/plan-prompt.md",
-    promptArgs: { CANDIDATE_NUMBERS: candidates.join(", ") },
-    output: sandcastle.Output.object({ tag: "plan", schema: planSchema }),
-  });
+  const plan = await timed("planner", { candidates: candidates.length }, () =>
+    sandcastle.run({
+      hooks,
+      sandbox: docker(),
+      name: "planner",
+      // One iteration is enough: the planner just needs to read and reason.
+      maxIterations: 1,
+      agent: sandcastle.claudeCode("claude-opus-4-8"),
+      promptFile: "./.sandcastle/plan-prompt.md",
+      promptArgs: { CANDIDATE_NUMBERS: candidates.join(", ") },
+      output: sandcastle.Output.object({ tag: "plan", schema: planSchema }),
+    }),
+  );
 
   const issues = plan.output.issues;
 
@@ -681,22 +692,24 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         // sandbox.run has no structured output).
         const specModel = "claude-opus-4-8";
         const specPath = `${SPEC_DIR}/issue-${issue.id}.md`;
-        const specRun = await sandbox.run({
-          name: "spec-writer",
-          maxIterations: 1,
-          agent: sandcastle.claudeCode(specModel),
-          promptFile: "./.sandcastle/spec-prompt.md",
-          promptArgs: {
-            TASK_ID: issue.id,
-            ISSUE_TITLE: issue.title,
-            BRANCH: issue.branch,
-            SPEC_PATH: specPath,
-            REPO: await github.repoSlug(),
-            AGENT_MARKER: markerFor("spec-writer", "claude-code", specModel),
-            VERIFY_COMMANDS: VERIFY_TEXT,
-          },
-          completionSignal: "</spec>",
-        });
+        const specRun = await timed("spec-writer", { issue: issue.id }, async () =>
+          sandbox.run({
+            name: "spec-writer",
+            maxIterations: 1,
+            agent: sandcastle.claudeCode(specModel),
+            promptFile: "./.sandcastle/spec-prompt.md",
+            promptArgs: {
+              TASK_ID: issue.id,
+              ISSUE_TITLE: issue.title,
+              BRANCH: issue.branch,
+              SPEC_PATH: specPath,
+              REPO: await github.repoSlug(),
+              AGENT_MARKER: markerFor("spec-writer", "claude-code", specModel),
+              VERIFY_COMMANDS: VERIFY_TEXT,
+            },
+            completionSignal: "</spec>",
+          }),
+        );
         const specJson = github.extractTag(specRun.stdout, "spec");
         if (specJson === null) {
           throw new Error(
@@ -718,13 +731,15 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         // outer iterations are fresh-context retries that continue from git
         // state when an attempt exhausts its turn bound.
         const implementerModel = "claude-opus-4-8";
-        const implement = await sandbox.run({
-          name: "implementer",
-          goal: spec.goal,
-          goalMaxTurns: GOAL_MAX_TURNS,
-          maxIterations: IMPLEMENT_ATTEMPTS,
-          agent: sandcastle.claudeCode(implementerModel),
-        });
+        const implement = await timed("implementer", { issue: issue.id }, () =>
+          sandbox.run({
+            name: "implementer",
+            goal: spec.goal,
+            goalMaxTurns: GOAL_MAX_TURNS,
+            maxIterations: IMPLEMENT_ATTEMPTS,
+            agent: sandcastle.claudeCode(implementerModel),
+          }),
+        );
 
         if (!implement.goalMet) {
           // Unverified work never merges: keep the branch and commits for the
@@ -739,14 +754,16 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
         if (!isPrMode) {
           // Legacy path — inner reviewer commits directly, merger merges later.
-          const review = await sandbox.run({
-            name: "reviewer",
-            maxIterations: 1,
-            agent: sandcastle.claudeCode("claude-opus-4-8"),
-            promptFile: "./.sandcastle/review-prompt.md",
-            // TARGET_BRANCH reaches the prompt via the built-in arg.
-            promptArgs: { TASK_ID: issue.id, BRANCH: issue.branch },
-          });
+          const review = await timed("reviewer", { issue: issue.id }, () =>
+            sandbox.run({
+              name: "reviewer",
+              maxIterations: 1,
+              agent: sandcastle.claudeCode("claude-opus-4-8"),
+              promptFile: "./.sandcastle/review-prompt.md",
+              // TARGET_BRANCH reaches the prompt via the built-in arg.
+              promptArgs: { TASK_ID: issue.id, BRANCH: issue.branch },
+            }),
+          );
           return {
             ...review,
             commits: [...implement.commits, ...review.commits],
@@ -764,10 +781,12 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
         let body: string | null = null;
         if (implement.resume) {
           try {
-            const writeup = await implement.resume(prWriterPrompt(issue.id), {
-              name: "pr-writer",
-              completionSignal: "</pr-body>",
-            });
+            const writeup = await timed("pr-writer", { issue: issue.id }, () =>
+              implement.resume!(prWriterPrompt(issue.id), {
+                name: "pr-writer",
+                completionSignal: "</pr-body>",
+              }),
+            );
             title = github.extractTag(writeup.stdout, "pr-title") ?? title;
             body = github.extractTag(writeup.stdout, "pr-body");
             if (body === null) {
@@ -866,19 +885,21 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   // -------------------------------------------------------------------------
   // Phase 3: Merge (legacy branches only — PR branches merge via approval)
   // -------------------------------------------------------------------------
-  await sandcastle.run({
-    hooks,
-    sandbox: docker(),
-    name: "merger",
-    maxIterations: 1,
-    agent: sandcastle.claudeCode("claude-opus-4-8"),
-    promptFile: "./.sandcastle/merge-prompt.md",
-    promptArgs: {
-      BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
-      ISSUES: completedIssues.map((i) => `- ${i.id}: ${i.title}`).join("\n"),
-      VERIFY_COMMANDS: VERIFY_TEXT,
-    },
-  });
+  await timed("merger", { branches: completedBranches.length }, () =>
+    sandcastle.run({
+      hooks,
+      sandbox: docker(),
+      name: "merger",
+      maxIterations: 1,
+      agent: sandcastle.claudeCode("claude-opus-4-8"),
+      promptFile: "./.sandcastle/merge-prompt.md",
+      promptArgs: {
+        BRANCHES: completedBranches.map((b) => `- ${b}`).join("\n"),
+        ISSUES: completedIssues.map((i) => `- ${i.id}: ${i.title}`).join("\n"),
+        VERIFY_COMMANDS: VERIFY_TEXT,
+      },
+    }),
+  );
 
   // PR-mode branches fork from local HEAD but their PR diffs are computed
   // against origin/master — keep the remote in sync with local merges.
