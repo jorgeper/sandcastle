@@ -6,6 +6,17 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Quick-tier-only baselines (`feat/quick-baseline-policy`)
+
+First run with tiering showed implementers running the full suite at
+attempt START too — a baseline check of inherited state (rational: goals
+are idempotent end states, and baselines attribute pre-existing
+failures), but it doubles full-suite cost per attempt. The implementer
+skill and spec prompt now reserve the full `VERIFY_COMMANDS` exclusively
+for the single pre-completion gate; baselines use the quick tier, with
+stash-and-compare as the late fallback when the final gate fails
+unexplainably.
+
 ## Analyze skill + tiered verification (`feat/analyze-skill-quick-verify`)
 
 Companion to the timing instrumentation below: instead of the owner (or
