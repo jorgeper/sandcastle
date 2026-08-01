@@ -268,6 +268,34 @@ create the issues (parent unlabeled; children labeled `Sandcastle`,
 decompose issue with the created tree and points you at the main loop. To
 stage the release, ask in-chat to hold labels.
 
+## PRD lane (label-routed, no chat)
+
+An alternative route to a PRD, for the `parallel-planner-goal-with-pr-review`
+template: same destination as Lane 1 + Lane 2 (an approved PRD PR, then
+sub-issues), but driven entirely by `npm run sandcastle` reading GitHub
+state — no `design.ts`/`decompose.ts`, no conversation store, no chat CLI.
+
+**`sandcastle:requires-prd` vs `sandcastle:design` — pick one per issue:**
+reach for `sandcastle:requires-prd` when you'd rather grill yourself in a
+Claude Code session than drive the chat CLI's turn-by-turn interview;
+reach for `sandcastle:design` when you want the designer's conversational
+interview (arrow-key options, Ctrl-C-safe detach, PR-comment feedback
+loop). Both end at a PRD PR gated by `sandcastle:approved` — don't label an
+issue with both.
+
+**The only two commands:**
+
+| You do                                                                         | What happens                                                                                                                                                                          |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Label an issue `Sandcastle` + `sandcastle:requires-prd`                        | `npm run sandcastle` nudges: "issue #N needs a PRD — run `/new-prd` in Claude Code"                                                                                                   |
+| `/new-prd` (in Claude Code, e.g. `/new-prd 41`, or no arg for a picker)        | Grills you (via `/grilling` if installed), writes `prd/NNN-slug.md`, opens the PRD PR on `prd/issue-<N>-<slug>` (body "PRD for #N", never `Closes`), comments the PR URL on the issue |
+| `gh pr edit <pr> --add-label "sandcastle:approved"`, then `npm run sandcastle` | Loop squash-merges the PRD PR, then runs the decomposer autonomously (no chat, no second approval) — it files `Sandcastle`-labeled sub-issues under the parent                        |
+| Nothing                                                                        | Once every sub-issue is closed, the next `npm run sandcastle` run closes the parent                                                                                                   |
+
+There's no `sandcastle:requires-prd` npm script — this lane lives entirely
+inside `npm run sandcastle` and the `/new-prd` skill; there's no separate
+conversation to start, resume, or detach from.
+
 ## Lane 3 — Implement (labeled issues → merged code)
 
 `npm run sandcastle`. Before planning, it **nudges** you about open

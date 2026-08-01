@@ -6,6 +6,30 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Label-routed PRD flow: /new-prd skill + single orchestrator (`feat/prd-label-flow`)
+
+Implements prd/008 (decision record: ADR 0023). Motivation: the owner
+files every entry-point issue and runs exactly one orchestration command —
+no more design/decompose scripts for the common case; grilling moves into
+the owner's own Claude Code session.
+
+**What was added**
+
+- Goal-template PRD lane: `sandcastle:requires-prd` issues are classified
+  from pure GitHub state each `npm run sandcastle` run — nudge (no PRD PR),
+  awaiting-review, merge-on-`sandcastle:approved`, autonomous decompose
+  into `Sandcastle` sub-issues (agent-created, sub-issue-API-linked, the
+  parent is the owner's issue), and close-once parent auto-close when all
+  sub-issues finish. Parents are excluded from direct implementation.
+- PR ↔ issue linkage is the branch name `prd/issue-<N>-<slug>` — stateless
+  detection, no conversation store; the PR body says "PRD for #N", never
+  `Closes`.
+- Issue-anchored `/new-prd` skill (scaffolded by init for the goal
+  template): picker over requires-prd issues, de-escalation offer,
+  grill-me wrapping with install offer, PRD on the convention branch,
+  PR + hand-off guidance, feedback mode against the open PR.
+- The conversational-prd scripts are untouched — this is a parallel path.
+
 ## Still-running heartbeat (`feat/phase-heartbeat`)
 
 With four issues in flight, the console went silent for 8+ minutes

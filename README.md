@@ -684,6 +684,8 @@ Mechanics and constraints:
 
 The `parallel-planner-goal-with-pr-review` template is the reference workflow: a spec writer distills each issue into a committed spec plus goal statement, and the implementer runs against it in goal mode. See `docs/spikes/goal-mode.md` for the verified runtime behavior.
 
+This template also carries a label-routed PRD lane: label an issue `sandcastle:requires-prd` and the main loop nudges you to run the issue-anchored `/new-prd` Claude Code skill, which grills you and opens a PRD PR. Approve that PR with `sandcastle:approved` and the loop takes it from there — merges it, decomposes it into `Sandcastle`-labeled sub-issues under the parent, and auto-closes the parent once every sub-issue is closed. `npm run sandcastle:init` now provisions the `sandcastle:requires-prd` label alongside the rest. See `prd/008-prd-label-flow.md` for the design.
+
 ### Conversations
 
 A **conversation** is a durable, turn-based exchange between a human and an agent running headless in a sandbox. Use it for workflows where the agent needs the human's decisions along the way — an interview that produces a PRD, a proposed issue breakdown that needs approval — without driving the agent's TUI by hand:

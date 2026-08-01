@@ -2,7 +2,10 @@ import { FileSystem } from "@effect/platform";
 import { Effect } from "effect";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { scaffoldPrdWorkflow } from "./PrdWorkflow.js";
+import {
+  scaffoldIssueAnchoredPrdWorkflow,
+  scaffoldPrdWorkflow,
+} from "./PrdWorkflow.js";
 import { SANDBOX_REPO_DIR } from "./SandboxFactory.js";
 
 const GITIGNORE = `.env
@@ -1234,6 +1237,17 @@ export const scaffold = (
       createLabel
     ) {
       yield* scaffoldPrdWorkflow(repoDir);
+    }
+
+    // Issue-anchored PRD workflow (prd/008): /new-prd targets a
+    // `sandcastle:requires-prd` issue and opens the PRD PR; main.mts owns
+    // merge + decompose. Same GitHub-only, label-gated conditions.
+    if (
+      templateName === "parallel-planner-goal-with-pr-review" &&
+      issueTracker.name === "github-issues" &&
+      createLabel
+    ) {
+      yield* scaffoldIssueAnchoredPrdWorkflow(repoDir);
     }
 
     // The customize skill must exist the moment init finishes: deferring
