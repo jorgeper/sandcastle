@@ -6,6 +6,21 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Analyze skill + tiered verification (`feat/analyze-skill-quick-verify`)
+
+Companion to the timing instrumentation below: instead of the owner (or
+an ad-hoc session) eyeballing logs, `sandcastle init` now scaffolds a
+`sandcastle-analyze` skill (`.claude/skills/sandcastle-analyze/`) that
+reads `timings.jsonl` + the timestamped agent logs, computes phase
+totals, slowest steps, a test-run census, sandbox overhead and install
+waste, and proposes config/Dockerfile changes with evidence. And for the
+"too many tests too often" problem specifically: a new
+`QUICK_VERIFY_COMMANDS` knob in `config.mts` — agents iterate with the
+fast subset and run the full `VERIFY_COMMANDS` once before declaring
+work done (spec, addresser, conflict prompts and the implementer skill
+all carry the policy; doctor validates the quick list; empty list = old
+behavior).
+
 ## Timing instrumentation for slow runs (`feat/timing-instrumentation`)
 
 Runs felt slow but the logs couldn't say where the time went — no line
