@@ -6,6 +6,23 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Image-gap evidence scoped to the current image (`feat/install-scan-staleness`)
+
+Doctor kept demanding a Dockerfile line the owner had already added:
+the install scanner filtered logs by file mtime then scanned the whole
+file, so append-forever logs re-tallied a day-old playwright install on
+every run — attributed to whatever image was current — and doctor never
+compared the tally's image id to the running image. Now the scanner
+splits logs on `--- Run started ---` delimiters and keeps only
+in-window runs; doctor ignores stale-image tallies, live-scans only
+runs newer than the image build, and when the suggested line already
+exists in the Dockerfile says so ("bake ineffective at runtime") rather
+than re-suggesting it. The playwright suggestion emits the robust
+`PLAYWRIGHT_BROWSERS_PATH` + pinned-version pattern. Also caught by the
+owner: init's label table was missing the new ready-to-merge row and
+doctor hardcoded "all 6 labels" — both fixed, with a tripwire test
+keeping the table and the provisioned set in sync.
+
 ## Ready-to-merge label: verified work survives crashes (`feat/ready-to-merge-label`)
 
 When the merger crash killed a run after issue #17 was implemented,
