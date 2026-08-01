@@ -44,8 +44,9 @@ One new label, alongside the existing family:
 The owner labels a feature issue `Sandcastle` + `sandcastle:requires-prd`.
 An issue carrying `sandcastle:requires-prd` is **never implemented
 directly** — the implementer's pickup query excludes it, whatever other
-labels it has. The main loop ensures the label exists (idempotent
-`gh label create || true` semantics, same as the scripts).
+labels it has. The label is provisioned by `npm run sandcastle:init` (it
+joins the template's `ALL_LABEL_DEFS`); human-applied labels are never
+created behind the owner's back.
 
 ## The state machine (PRD lane in `main.mts`)
 

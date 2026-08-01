@@ -19,11 +19,12 @@ Edit the right-hand column to match whatever vocabulary you actually use.
 Canonical labels that route an issue to a pipeline lane (prd/005). The label
 picks the agent; the lane's script picks up its labeled issues:
 
-| Label                  | Meaning                             | Picked up by                        |
-| ---------------------- | ----------------------------------- | ----------------------------------- |
-| `sandcastle:design`    | Needs a PRD; grill the owner        | `design.ts` (conversational-prd)    |
-| `sandcastle:decompose` | Merged PRD needs an issue breakdown | `decompose.ts` (conversational-prd) |
-| `Sandcastle`           | Implementer-ready work item         | the main loop                       |
+| Label                     | Meaning                                             | Picked up by                                           |
+| ------------------------- | --------------------------------------------------- | ------------------------------------------------------ |
+| `sandcastle:design`       | Needs a PRD; grill the owner                        | `design.ts` (conversational-prd)                       |
+| `sandcastle:decompose`    | Merged PRD needs an issue breakdown                 | `decompose.ts` (conversational-prd)                    |
+| `Sandcastle`              | Implementer-ready work item                         | the main loop                                          |
+| `sandcastle:requires-prd` | Needs an approved PRD PR before decompose/implement | `main.mts` PRD lane (goal template) + `/new-prd` skill |
 
 Routing labels only — no state labels. GitHub-native state (issue open/closed,
 PR merged, `Closes #N`) carries progress.
