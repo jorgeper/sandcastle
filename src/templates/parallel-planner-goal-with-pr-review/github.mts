@@ -48,6 +48,59 @@ export const repoSlug = async (): Promise<string> =>
     await gh(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
   ).trim();
 
+// --- PRD lane (prd/008) wrappers — raw JSON out, parsing in prd-lane.mts ---
+
+export const listRequiresPrdIssues = async (): Promise<IssueInfo[]> => {
+  const raw = await gh([
+    "issue",
+    "list",
+    "--state",
+    "open",
+    "--label",
+    REQUIRES_PRD_LABEL,
+    "--limit",
+    "100",
+    "--json",
+    "number,title,labels",
+  ]);
+  return (JSON.parse(raw) as any[]).map((issue) => ({
+    number: issue.number,
+    title: issue.title,
+    labels: (issue.labels as any[]).map((label) => label.name),
+  }));
+};
+
+export const listAllPrHeads = async (): Promise<
+  { number: number; state: string; headRefName: string }[]
+> => {
+  const raw = await gh([
+    "pr",
+    "list",
+    "--state",
+    "all",
+    "--limit",
+    "200",
+    "--json",
+    "number,state,headRefName",
+  ]);
+  return JSON.parse(raw);
+};
+
+export const subIssuesJson = (
+  repo: string,
+  issueNumber: number,
+): Promise<string> =>
+  gh(["api", `repos/${repo}/issues/${issueNumber}/sub_issues`]);
+
+export const prApprovalJson = (prNumber: number): Promise<string> =>
+  gh(["pr", "view", String(prNumber), "--json", "labels,reviewDecision"]);
+
+export const prFilesJson = (prNumber: number): Promise<string> =>
+  gh(["pr", "view", String(prNumber), "--json", "files"]);
+
+export const issueCommentsJson = (issueNumber: number): Promise<string> =>
+  gh(["issue", "view", String(issueNumber), "--json", "comments"]);
+
 export const findLatestPr = async (
   branch: string,
 ): Promise<{ number: number; state: "OPEN" | "MERGED" | "CLOSED" } | null> => {
