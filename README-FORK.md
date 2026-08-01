@@ -6,6 +6,20 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Timing instrumentation for slow runs (`feat/timing-instrumentation`)
+
+Runs felt slow but the logs couldn't say where the time went — no line
+in a `.sandcastle/logs/*.log` file carried a timestamp, so a tool call
+that took 8 minutes looked identical to one that took 2 seconds. Now:
+FileDisplay stamps every log line with `[HH:MM:SS]` UTC (gaps between
+entries = step durations), the orchestrator logs `Agent stopped after
+Xs` and `Iteration N finished in Xs`, and the goal template wraps all
+nine agent-run sites (planner, spec-writer, implementer, reviewer,
+pr-writer, pr-reviewer, addresser, conflict-resolver, merger) in a
+`timed()` helper (`timing.mts`) that prints timestamped start/finish
+console lines and appends `{ts, phase, ms, ok, issue/pr}` JSON lines
+to `.sandcastle/logs/timings.jsonl` for offline analysis.
+
 ## Chat re-refs stdin after the Ink app exits (`feat/chat-stdin-ref`)
 
 Ink unrefs `process.stdin` when it tears down raw mode on unmount, so
