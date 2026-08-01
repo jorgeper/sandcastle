@@ -4,7 +4,10 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { scaffoldPrdWorkflow } from "./PrdWorkflow.js";
+import {
+  scaffoldIssueAnchoredPrdWorkflow,
+  scaffoldPrdWorkflow,
+} from "./PrdWorkflow.js";
 
 const makeDir = () => mkdtemp(join(tmpdir(), "prd-workflow-"));
 
@@ -71,5 +74,62 @@ describe("scaffoldPrdWorkflow", () => {
     await run(dir);
     const template = await readFile(join(dir, "prd", "TEMPLATE.md"), "utf-8");
     expect(template).toContain("## Problem");
+  });
+});
+
+describe("scaffoldIssueAnchoredPrdWorkflow", () => {
+  const runIssueAnchored = (repoDir: string) =>
+    Effect.runPromise(
+      scaffoldIssueAnchoredPrdWorkflow(repoDir).pipe(
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    );
+
+  it("writes the PRD template and the issue-anchored new-prd skill only", async () => {
+    const dir = await makeDir();
+    await runIssueAnchored(dir);
+
+    const template = await readFile(join(dir, "prd", "TEMPLATE.md"), "utf-8");
+    expect(template).toContain("## Problem");
+
+    const newPrd = await readFile(
+      join(dir, ".claude", "skills", "new-prd", "SKILL.md"),
+      "utf-8",
+    );
+    expect(newPrd).toContain("name: new-prd");
+    // Issue-anchored: targets a requires-prd issue, opens a PR on the
+    // prd/issue-<N>-<slug> branch, and must never close the issue.
+    expect(newPrd).toContain("sandcastle:requires-prd");
+    expect(newPrd).toContain("prd/issue-");
+    expect(newPrd).toContain("PRD for #");
+    expect(newPrd).toMatch(/never.*Closes/i);
+    // Still wraps the grilling skill with the install offer.
+    expect(newPrd).toContain("github.com/mattpocock/skills");
+    expect(newPrd).toContain(
+      "claude plugin install mattpocock-skills@mattpocock",
+    );
+    // Decompose belongs to the orchestrator now — no decompose-prd skill.
+    await expect(
+      readFile(
+        join(dir, ".claude", "skills", "decompose-prd", "SKILL.md"),
+        "utf-8",
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("does not overwrite an existing new-prd skill", async () => {
+    const dir = await makeDir();
+    await mkdir(join(dir, ".claude", "skills", "new-prd"), { recursive: true });
+    await writeFile(
+      join(dir, ".claude", "skills", "new-prd", "SKILL.md"),
+      "user-customized",
+    );
+    await runIssueAnchored(dir);
+    expect(
+      await readFile(
+        join(dir, ".claude", "skills", "new-prd", "SKILL.md"),
+        "utf-8",
+      ),
+    ).toBe("user-customized");
   });
 });
