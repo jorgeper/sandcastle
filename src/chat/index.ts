@@ -46,6 +46,9 @@ export const chat = async (conversation: Conversation): Promise<ChatResult> => {
       { exitOnCtrlC: true },
     );
     await instance.waitUntilExit();
+    // Ink unrefs stdin when tearing down raw mode; restore the ref so a
+    // caller that prompts on stdin afterwards keeps the event loop alive.
+    process.stdin.ref();
     return { finalTurn };
   } finally {
     // Detach = tear down the keep-alive container; worktree, store, and

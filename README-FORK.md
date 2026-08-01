@@ -6,6 +6,17 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Chat re-refs stdin after the Ink app exits (`feat/chat-stdin-ref`)
+
+Ink unrefs `process.stdin` when it tears down raw mode on unmount, so
+any script that prompted on stdin after `chat()` returned — the
+design/decompose/issue template loops all do — exited mid-await with
+Node's "unsettled top-level await" warning instead of waiting for
+input. `chat()` now calls `process.stdin.ref()` right after
+`waitUntilExit`, so post-conversation prompts keep the event loop
+alive. Raw mode only engages while a Select/TextInput is mounted,
+which is why only interactive conversations hit this.
+
 ## Per-repo customization: toolchain profiles + verify commands (`feat/repo-customization`)
 
 The goal template hardcoded npm everywhere it mattered — `npm install`
