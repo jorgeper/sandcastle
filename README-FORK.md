@@ -6,6 +6,18 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Ready-to-merge label: verified work survives crashes (`feat/ready-to-merge-label`)
+
+When the merger crash killed a run after issue #17 was implemented,
+reviewed, and gate-verified, the restart re-classified the still-open
+issue as "implement" and paid a full implementer attempt — including
+another `validate:quick` — just to re-prove finished work; nothing
+durable recorded that the gate had passed. Now the orchestrator applies
+a `sandcastle:ready-to-merge` status label the moment the goal is
+judged met (legacy path). The next cycle routes labeled issues straight
+to the merge phase — skipping spec-writer, implementer, and reviewer —
+and closes them directly when the branch is already fully merged.
+
 ## Prompt-arg tripwire + merger crash fix (`feat/task-command-args`)
 
 Syncing the goal template's merge-prompt into the playground exposed a
