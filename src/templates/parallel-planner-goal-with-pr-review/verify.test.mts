@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { missingVerifyScripts, verifyCommandsText } from "./verify.mts";
+import {
+  effectiveQuickCommands,
+  missingVerifyScripts,
+  verifyCommandsText,
+} from "./verify.mts";
 
 describe("verifyCommandsText", () => {
   it("formats one command", () => {
@@ -34,5 +38,19 @@ describe("missingVerifyScripts", () => {
   });
   it("handles pnpm/yarn/bun runners", () => {
     expect(missingVerifyScripts(["pnpm run lint"], scripts)).toEqual(["lint"]);
+  });
+});
+
+describe("effectiveQuickCommands", () => {
+  it("returns the quick list when declared", () => {
+    expect(
+      effectiveQuickCommands(["npm run typecheck"], ["npm run typecheck", "npm run test"]),
+    ).toEqual(["npm run typecheck"]);
+  });
+
+  it("falls back to the full list when quick is empty", () => {
+    expect(effectiveQuickCommands([], ["npm run test"])).toEqual([
+      "npm run test",
+    ]);
   });
 });

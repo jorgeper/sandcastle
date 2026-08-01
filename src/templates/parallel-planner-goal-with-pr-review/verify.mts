@@ -12,6 +12,15 @@ export const verifyCommandsText = (commands: readonly string[]): string => {
 };
 
 /**
+ * The inner-loop verify list: the quick subset when declared, otherwise the
+ * full list — so an empty QUICK_VERIFY_COMMANDS means "no tiering".
+ */
+export const effectiveQuickCommands = (
+  quick: readonly string[],
+  full: readonly string[],
+): readonly string[] => (quick.length > 0 ? quick : full);
+
+/**
  * Script names referenced by `<pm> run <script>` verify commands but absent
  * from package.json `scripts`. Non-runner commands (cargo, pytest, …) are
  * skipped — their absence is a PATH question, not a package.json one.

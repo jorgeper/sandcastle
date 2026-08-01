@@ -66,10 +66,11 @@ import {
   MAX_DEBATE_ROUNDS,
   MAX_ITERATIONS,
   PR_SUMMARY_DETAILED,
+  QUICK_VERIFY_COMMANDS,
   SPEC_DIR,
   VERIFY_COMMANDS,
 } from "./config.mts";
-import { verifyCommandsText } from "./verify.mts";
+import { effectiveQuickCommands, verifyCommandsText } from "./verify.mts";
 
 const execFileAsync = promisify(execFile);
 
@@ -142,6 +143,13 @@ const copyToWorktree = [...COPY_TO_WORKTREE];
 // Prompt-ready rendering of the verify commands, injected as the
 // VERIFY_COMMANDS prompt arg everywhere agents are told to verify work.
 const VERIFY_TEXT = verifyCommandsText(VERIFY_COMMANDS);
+
+// Inner-loop rendering: the quick subset while iterating (QUICK_VERIFY_TEXT),
+// with the full suite reserved for the once-before-done gate. Falls back to
+// the full list when QUICK_VERIFY_COMMANDS is empty.
+const QUICK_VERIFY_TEXT = verifyCommandsText(
+  effectiveQuickCommands(QUICK_VERIFY_COMMANDS, VERIFY_COMMANDS),
+);
 
 // ---------------------------------------------------------------------------
 // Agent identity & attribution
@@ -355,6 +363,7 @@ const runDebate = async (
             THREADS_JSON: threadsJson,
             BRANCH: branch,
             VERIFY_COMMANDS: VERIFY_TEXT,
+            QUICK_VERIFY_COMMANDS: QUICK_VERIFY_TEXT,
           },
         }),
       );
@@ -568,6 +577,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
             AGENT_NAME: "conflict-resolver",
             BRANCH: branch,
             VERIFY_COMMANDS: VERIFY_TEXT,
+            QUICK_VERIFY_COMMANDS: QUICK_VERIFY_TEXT,
           },
         }),
       );
@@ -706,6 +716,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
               REPO: await github.repoSlug(),
               AGENT_MARKER: markerFor("spec-writer", "claude-code", specModel),
               VERIFY_COMMANDS: VERIFY_TEXT,
+              QUICK_VERIFY_COMMANDS: QUICK_VERIFY_TEXT,
             },
             completionSignal: "</spec>",
           }),

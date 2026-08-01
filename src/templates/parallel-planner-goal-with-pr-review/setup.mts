@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { VERIFY_COMMANDS } from "./config.mts";
+import { QUICK_VERIFY_COMMANDS, VERIFY_COMMANDS } from "./config.mts";
 import { parseEnvFile } from "./env.mts";
 import * as github from "./github.mts";
 import {
@@ -56,6 +56,7 @@ export const printHelp = (): void => {
 // Written once, committed by the owner; never overwritten if present.
 const SKILL_PATH = ".claude/skills/sandcastle-implementer/SKILL.md";
 const CUSTOMIZE_SKILL_PATH = ".claude/skills/sandcastle-customize/SKILL.md";
+const ANALYZE_SKILL_PATH = ".claude/skills/sandcastle-analyze/SKILL.md";
 
 const scaffoldSkill = (
   targetPath: string,
@@ -74,6 +75,9 @@ export const scaffoldImplementerSkill = (): "created" | "exists" =>
 export const scaffoldCustomizeSkill = (): "created" | "exists" =>
   scaffoldSkill(CUSTOMIZE_SKILL_PATH, "./customize-skill.md");
 
+export const scaffoldAnalyzeSkill = (): "created" | "exists" =>
+  scaffoldSkill(ANALYZE_SKILL_PATH, "./analyze-skill.md");
+
 export const runInit = async (): Promise<void> => {
   // Scaffold the local skills BEFORE any GitHub call: a bad token or missing
   // remote must not strand purely local scaffolding (nudges-not-gates).
@@ -89,6 +93,13 @@ export const runInit = async (): Promise<void> => {
     customize === "created"
       ? `Wrote ${CUSTOMIZE_SKILL_PATH} — run it from your coding agent to tune verify commands; commit it with the scaffold.`
       : `${CUSTOMIZE_SKILL_PATH} already exists — left untouched.`,
+  );
+
+  const analyze = scaffoldAnalyzeSkill();
+  console.log(
+    analyze === "created"
+      ? `Wrote ${ANALYZE_SKILL_PATH} — run it from your coding agent after a slow run to see where the time went.`
+      : `${ANALYZE_SKILL_PATH} already exists — left untouched.`,
   );
 
   const repo = await github.repoSlug();
@@ -238,12 +249,15 @@ export const runDoctor = async (options?: {
     } catch {
       // No package.json (non-node repo): pm-run checks don't apply.
     }
-    const missing = missingVerifyScripts(VERIFY_COMMANDS, scripts);
+    const missing = missingVerifyScripts(
+      [...VERIFY_COMMANDS, ...QUICK_VERIFY_COMMANDS],
+      scripts,
+    );
     if (missing.length > 0) {
       return {
         ok: false,
         detail: `package.json has no script(s): ${missing.join(", ")}`,
-        hint: "fix VERIFY_COMMANDS in .sandcastle/config.mts or add the scripts to package.json",
+        hint: "fix VERIFY_COMMANDS/QUICK_VERIFY_COMMANDS in .sandcastle/config.mts or add the scripts to package.json",
       };
     }
     return { ok: true, detail: VERIFY_COMMANDS.join(", ") };

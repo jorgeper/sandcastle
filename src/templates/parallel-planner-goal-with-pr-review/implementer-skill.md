@@ -36,11 +36,18 @@ If applicable, use RGR to complete the task:
 
 ## Feedback loops
 
-Before committing, run the verify commands declared in
-`.sandcastle/config.mts` (the `VERIFY_COMMANDS` list) and make sure they
-pass — the goal judge needs to see their output in your session. Your
-repo's CLAUDE.md/AGENTS.md may refine which commands are appropriate; it
-overrides the list.
+Verify in two tiers, both declared in `.sandcastle/config.mts`:
+
+- **While iterating** run `QUICK_VERIFY_COMMANDS` (or tests targeted at
+  the code you changed) after each change. If the list is empty, pick the
+  fastest relevant subset of `VERIFY_COMMANDS` yourself.
+- **Once, right before declaring the goal met**, run the full
+  `VERIFY_COMMANDS` and make sure they pass — the goal judge needs to see
+  their output in your session. Do NOT re-run the full suite after every
+  small change; full-suite runs are the biggest time cost of an attempt.
+
+Your repo's CLAUDE.md/AGENTS.md may refine which commands are
+appropriate; it overrides these lists.
 
 ## Commits
 
