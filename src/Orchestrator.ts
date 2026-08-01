@@ -355,6 +355,7 @@ export const orchestrate = (
     for (let i = 1; i <= iterations; i++) {
       yield* checkAbort();
       yield* display.status(label(`Iteration ${i}/${iterations}`), "info");
+      const iterationStart = Date.now();
 
       const sandboxResult = yield* factory.withSandbox(
         (
@@ -414,6 +415,7 @@ export const orchestrate = (
                     );
 
                 yield* display.status(label("Agent started"), "success");
+                const agentStart = Date.now();
 
                 // Invoke the agent — buffer text deltas so Pi's single-token
                 // chunks are displayed as readable multi-word lines.
@@ -497,7 +499,12 @@ export const orchestrate = (
                 // Flush any remaining buffered text deltas
                 textBuffer.dispose();
 
-                yield* display.status(label("Agent stopped"), "info");
+                yield* display.status(
+                  label(
+                    `Agent stopped after ${((Date.now() - agentStart) / 1000).toFixed(1)}s`,
+                  ),
+                  "info",
+                );
 
                 // Capture session while sandbox is still alive. Usage from the
                 // stream (e.g. Codex's turn.completed) is the baseline; a
@@ -561,6 +568,13 @@ export const orchestrate = (
 
       const lifecycleResult = sandboxResult.value;
       iterationPreservedPath = sandboxResult.preservedWorktreePath;
+
+      yield* display.status(
+        label(
+          `Iteration ${i} finished in ${((Date.now() - iterationStart) / 1000).toFixed(1)}s`,
+        ),
+        "info",
+      );
 
       allCommits.push(...lifecycleResult.commits);
       allStdout += lifecycleResult.result.stdout;

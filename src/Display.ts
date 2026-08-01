@@ -163,21 +163,30 @@ export const FileDisplay = {
         // status, context-window summaries) off the tail of streamed prose.
         let midLine = false;
 
+        // Every line that starts fresh carries a wall-clock stamp (UTC, same
+        // clock as the run-started delimiter) so the gap between consecutive
+        // entries reads as the duration of the step between them.
+        const timestamp = (): string =>
+          `[${new Date().toISOString().slice(11, 19)}] `;
+
         const appendToLog = (line: string): Effect.Effect<void> =>
           Effect.suspend(() => {
             const prefix = midLine ? "\n" : "";
             midLine = false;
             return fs
-              .writeFileString(filePath, `${prefix}${line}\n`, { flag: "a" })
+              .writeFileString(filePath, `${prefix}${timestamp()}${line}\n`, {
+                flag: "a",
+              })
               .pipe(Effect.ignore);
           });
 
         const appendRaw = (chunk: string): Effect.Effect<void> =>
           Effect.suspend(() => {
             if (chunk.length === 0) return Effect.void;
+            const prefix = midLine ? "" : timestamp();
             midLine = !chunk.endsWith("\n");
             return fs
-              .writeFileString(filePath, chunk, { flag: "a" })
+              .writeFileString(filePath, `${prefix}${chunk}`, { flag: "a" })
               .pipe(Effect.ignore);
           });
 

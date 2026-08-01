@@ -360,7 +360,43 @@ describe("FileDisplay", () => {
     );
 
     const log = readLog(logPath);
-    expect(log).toContain("Context window: 10%\nContext window: 20%\n");
+    expect(log).toMatch(
+      /Context window: 10%\n\[\d{2}:\d{2}:\d{2}\] Context window: 20%\n/,
+    );
+  });
+
+  it("prefixes line entries with a [HH:MM:SS] timestamp", async () => {
+    const { logPath, layer } = setup();
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const d = yield* Display;
+        yield* d.status("Agent started", "success");
+        yield* d.toolCall("Bash", "npm test");
+        yield* d.text("Context window: 103k");
+      }).pipe(Effect.provide(layer)),
+    );
+
+    const log = readLog(logPath);
+    expect(log).toMatch(/\[\d{2}:\d{2}:\d{2}\] Agent started\n/);
+    expect(log).toMatch(/\[\d{2}:\d{2}:\d{2}\] Bash\(npm test\)\n/);
+    expect(log).toMatch(/\[\d{2}:\d{2}:\d{2}\] Context window: 103k\n/);
+  });
+
+  it("stamps a raw chunk only when it starts a fresh line", async () => {
+    const { logPath, layer } = setup();
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const d = yield* Display;
+        yield* d.textChunk("Now I have");
+        yield* d.textChunk(" a clear picture.");
+      }).pipe(Effect.provide(layer)),
+    );
+
+    const log = readLog(logPath);
+    expect(log).toMatch(/\[\d{2}:\d{2}:\d{2}\] Now I have a clear picture\./);
+    expect(log).not.toMatch(/a clear picture\.\s*\[\d{2}:\d{2}:\d{2}\]/);
   });
 
   it("textChunk() writes raw chunks with no appended newline", async () => {
@@ -391,7 +427,9 @@ describe("FileDisplay", () => {
     );
 
     const log = readLog(logPath);
-    expect(log).toContain("Let me read the file.\nRead(src/hello.ts)\n");
+    expect(log).toMatch(
+      /Let me read the file\.\n\[\d{2}:\d{2}:\d{2}\] Read\(src\/hello\.ts\)\n/,
+    );
   });
 
   it("does not insert an extra newline when the chunk already ends with one", async () => {
@@ -406,7 +444,7 @@ describe("FileDisplay", () => {
     );
 
     const log = readLog(logPath);
-    expect(log).toContain("Done.\nContext window: 10%\n");
+    expect(log).toMatch(/Done\.\n\[\d{2}:\d{2}:\d{2}\] Context window: 10%\n/);
     expect(log).not.toContain("Done.\n\nContext window");
   });
 
