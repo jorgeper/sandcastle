@@ -6,6 +6,32 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Agent-approved PRs + one shared review bar (`feat/agent-approval`)
+
+Two changes to the goal template's review layer, both about the same thing:
+the reviewer agent doing the reviewing job properly, end to end.
+
+**What was added**
+
+- `sandcastle:agent-approve` — a third trigger label. It runs the full PR
+  flow (`sandcastle:require-pr` behaviour, implied, so it works alone) but
+  delegates the merge authorization to the `pr-reviewer` agent: when the
+  reviewer has nothing outstanding and every thread is resolved, it posts a
+  marked "approving on behalf of the owner" comment and adds
+  `sandcastle:approved` itself. The next run merges — no human touch.
+  Deadlocks are unaffected: `NEEDS-DECISION` threads still escalate to
+  `sandcastle:needs-decision` and wait for the owner. GitHub's Approve
+  button stays forbidden in every mode (self-authored PRs can't use it);
+  the gate is the label, as before. `finalizeDebate` backstops the label
+  write if the reviewer's turn ends without it, so a delegated PR can never
+  strand waiting on an owner who has stepped back.
+- One review bar for both reviewers: the correctness / clarity / balance /
+  standards / preserve-functionality checklist that only the branch
+  reviewer had now lives in `.sandcastle/review-checklist.md`, referenced by
+  both `review-prompt.md` and `pr-review-prompt.md`. Each prompt keeps only
+  what is genuinely mode-specific — the branch reviewer edits and commits,
+  the PR reviewer comments in threads and signs off.
+
 ## Label-routed PRD flow: /new-prd skill + single orchestrator (`feat/prd-label-flow`)
 
 Implements prd/008 (decision record: ADR 0023). Motivation: the owner

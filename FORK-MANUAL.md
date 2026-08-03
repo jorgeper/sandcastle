@@ -305,6 +305,9 @@ implementers run in goal mode, reviewer/merger land the work.
 
 - `sandcastle:require-pr` on an issue → PR + agent review debate instead
   of auto-merge.
+- `sandcastle:agent-approve` on an issue → same PR + debate, but the
+  reviewer agent adds `sandcastle:approved` when it signs off, so the PR
+  merges without waiting for you. Deadlocks still escalate.
 - PRs labeled `sandcastle:ready` await you; comment (unmarked comments
   route to the addresser), resolve threads.
 - Approve with `sandcastle:approved` → orchestrator merges.
@@ -324,6 +327,7 @@ implementers run in goal mode, reviewer/merger land the work.
 | Turn a merged PRD into issues  | `npm run sandcastle:decompose`; approve the tree in chat                                                         |
 | Build the backlog              | `npm run sandcastle`                                                                                             |
 | Gate an impl issue behind a PR | Label it `sandcastle:require-pr`                                                                                 |
+| Get the PR without the wait    | Label it `sandcastle:agent-approve` — the reviewer approves in your place                                        |
 | See what agents are doing      | `tail -f .sandcastle/logs/conversation-<id>.log`; transcripts in `.sandcastle/conversations/<id>/messages.jsonl` |
 
 **Who wrote that?** Everything an agent writes on GitHub under your
