@@ -6,6 +6,29 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Template housekeeping: Opus 5, quiet installs (`feat/template-housekeeping`)
+
+Small generic changes that accumulated while dogfooding on a real repo.
+
+**What was added**
+
+- Every agent in the goal template and the conversational-prd overlay runs
+  on `claude-opus-5` (the library's `DEFAULT_MODEL` and the other templates
+  still say `claude-opus-4-8`; those are upstream's to bump).
+- The Node toolchain profile and the goal template's default
+  `INSTALL_COMMAND` are `npm install --no-audit --no-fund`. The audit step
+  POSTs the whole package list to the registry, and a hung POST there blew
+  past the sandbox hook timeout; with both skipped the hook converges in
+  seconds.
+- `main.mts` header cites `<SPEC_DIR>` rather than a hardcoded `specs/`;
+  the `CODING_STANDARDS.md` placeholder tells the owner that the general
+  review bar lives in `review-checklist.md` and only repo-specific rules
+  belong in the standards file.
+- The stale "image-gap nudge" InitService test now asserts the
+  image-scoped scan (`scanLogs(since)`) introduced by
+  `feat/install-scan-staleness`; `main` is green on non-container tests
+  again.
+
 ## Parallel-lane cap (`feat/parallel-lane-cap`)
 
 The planner returns every unblocked issue and the goal template dispatched

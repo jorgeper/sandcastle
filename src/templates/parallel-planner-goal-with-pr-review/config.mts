@@ -51,8 +51,11 @@ export const PR_SUMMARY_DETAILED = true;
 export const TOOLCHAIN = "node";
 
 // Runs inside the sandbox before the agent starts each iteration
-// (hooks.sandbox.onSandboxReady).
-export const INSTALL_COMMAND = "npm install";
+// (hooks.sandbox.onSandboxReady). --no-audit --no-fund: the audit step
+// POSTs the full package list to the registry, and a hung POST there can
+// blow past the sandbox hook timeout; neither audit nor fund output matters
+// in a throwaway sandbox.
+export const INSTALL_COMMAND = "npm install --no-audit --no-fund";
 
 // Host paths copied into the worktree before each sandbox starts.
 export const COPY_TO_WORKTREE = ["node_modules"];

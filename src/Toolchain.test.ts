@@ -58,7 +58,7 @@ describe("detectToolchain", () => {
     await writeFile(join(dir, "src-tauri", "tauri.conf.json"), "{}");
     const d = await run(detectToolchain(dir));
     expect(d?.profile.name).toBe("tauri");
-    expect(d?.installCommand).toBe("npm install");
+    expect(d?.installCommand).toBe("npm install --no-audit --no-fund");
     expect(d?.verifyProposal).toEqual([
       "npm run typecheck",
       "npm run test:unit",

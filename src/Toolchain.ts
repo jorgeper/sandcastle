@@ -115,8 +115,11 @@ export const scanVerifyScripts = (
 const runCommand = (pm: PackageManager, script: string) =>
   `${pm} run ${script}`;
 
+// npm: --no-audit --no-fund — the audit step POSTs the full package list to
+// the registry, and a hung POST there can blow past the sandbox hook
+// timeout; neither audit nor fund output matters in a throwaway sandbox.
 const INSTALL_COMMANDS: Record<PackageManager, string> = {
-  npm: "npm install",
+  npm: "npm install --no-audit --no-fund",
   pnpm: "pnpm install",
   yarn: "yarn install",
   bun: "bun install",
