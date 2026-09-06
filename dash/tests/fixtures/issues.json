@@ -1,0 +1,73 @@
+{
+  "data": {
+    "repository": {
+      "issues": {
+        "nodes": [
+          {
+            "number": 300,
+            "title": "PRD: comments split",
+            "state": "OPEN",
+            "url": "https://github.com/o/r/issues/300",
+            "createdAt": "2026-09-01T10:00:00Z",
+            "updatedAt": "2026-09-06T10:00:00Z",
+            "closedAt": null,
+            "labels": {
+              "nodes": [
+                { "name": "sandcastle" },
+                { "name": "sandcastle:requires-prd" }
+              ]
+            },
+            "parent": null,
+            "subIssues": { "nodes": [{ "number": 301 }, { "number": 302 }] }
+          },
+          {
+            "number": 301,
+            "title": "Child one",
+            "state": "OPEN",
+            "url": "https://github.com/o/r/issues/301",
+            "createdAt": "2026-09-05T10:00:00Z",
+            "updatedAt": "2026-09-06T09:00:00Z",
+            "closedAt": null,
+            "labels": {
+              "nodes": [
+                { "name": "sandcastle" },
+                { "name": "sandcastle:effort-hard" }
+              ]
+            },
+            "parent": { "number": 300 },
+            "subIssues": { "nodes": [] }
+          },
+          {
+            "number": 302,
+            "title": "Child two (done)",
+            "state": "CLOSED",
+            "url": "https://github.com/o/r/issues/302",
+            "createdAt": "2026-09-05T10:00:00Z",
+            "updatedAt": "2026-09-06T08:00:00Z",
+            "closedAt": "2026-09-06T08:00:00Z",
+            "labels": { "nodes": [{ "name": "sandcastle" }] },
+            "parent": { "number": 300 },
+            "subIssues": { "nodes": [] }
+          },
+          {
+            "number": 310,
+            "title": "Plain queued issue",
+            "state": "OPEN",
+            "url": "https://github.com/o/r/issues/310",
+            "createdAt": "2026-09-06T06:00:00Z",
+            "updatedAt": "2026-09-06T06:00:00Z",
+            "closedAt": null,
+            "labels": {
+              "nodes": [
+                { "name": "sandcastle" },
+                { "name": "sandcastle:require-pr" }
+              ]
+            },
+            "parent": null,
+            "subIssues": { "nodes": [] }
+          }
+        ]
+      }
+    }
+  }
+}
