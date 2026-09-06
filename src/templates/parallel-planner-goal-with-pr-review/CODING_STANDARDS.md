@@ -2,7 +2,10 @@
 
 <!-- Customize this file with your project's coding standards.
      The reviewer agent loads it during code review via @.sandcastle/CODING_STANDARDS.md
-     so these standards are enforced during review without costing tokens during implementation. -->
+     so these standards are enforced during review without costing tokens during implementation.
+     Correctness, clarity and the rest of the general bar live in review-checklist.md;
+     only rules specific to THIS repository belong here, stated so a reviewer can decide
+     each one against a diff. -->
 
 ## Style
 

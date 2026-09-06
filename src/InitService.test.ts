@@ -1430,10 +1430,12 @@ describe("InitService scaffold", () => {
         "utf-8",
       );
       // Run end: scan this run's logs, tally, nudge. Doctor: merge the tally
-      // with a LIVE log scan, so interrupted/in-flight runs still surface.
+      // with a LIVE log scan scoped to the current image (image-gap evidence
+      // older than the image is stale), so interrupted/in-flight runs still
+      // surface.
       expect(mainTs).toContain("runInstallScan");
       expect(setup).toContain("image gaps");
-      expect(setup).toContain("scanLogs(0)");
+      expect(setup).toContain("scanLogs(since)");
     });
 
     it("the merge pipeline works on any default branch and the reviewer runs (issue-7 circle)", async () => {
@@ -2901,7 +2903,9 @@ describe("InitService scaffold", () => {
         "utf-8",
       );
       expect(config).toContain('TOOLCHAIN = "node"');
-      expect(config).toContain('INSTALL_COMMAND = "npm install"');
+      expect(config).toContain(
+        'INSTALL_COMMAND = "npm install --no-audit --no-fund"',
+      );
     });
 
     it("snapshots the scaffold to .template-base with a BASE.json marker", async () => {
