@@ -6,6 +6,41 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Release lane: issue-driven releases, cut in your session (`feat/release-lane`)
+
+Implements prd/009 (decision record: ADR 0024). Ported from a dogfooding
+repo's release flow and generalized: nothing platform- or project-specific
+remains in the fork — repo mechanics live in one block the owner fills in.
+
+**What was added**
+
+- `.sandcastle/release-lane.mts`: the one parser and classifier for
+  `sandcastle:release` issues — strict-semver body parse (`Version`,
+  optional `Targets`, optional `Mode: cut|append`, `## Changelog`),
+  prerelease-aware ordering guard (a version at or behind the newest tag
+  is refused; rolling tags like `latest` are ignored), abandoned-draft
+  report, parked-until-bug-closes failure flow, mid-flight resume, and
+  every phase-marker string. Pure and unit-tested.
+- Two scaffolded project skills (`ReleaseWorkflow.ts`, written by init
+  for the goal template, never overwritten): `/new-release` (interview →
+  approved changelog → filed issue; validates by invoking the module) and
+  `/cut-release <n>` (preflight via the module, then a phased runbook
+  with one marker comment per phase; stops at a verified draft —
+  publishing is the owner's). The runbook's repo facts sit in a fenced
+  `release-facts` block seeded with `TODO(sandcastle)` sentinels that halt
+  the cut until filled.
+- `sandcastle:release` label (init provisions it; setup/PR_SETUP tables
+  list it); gh wrappers for tags, releases, issue state and comments.
+- `release/*` branches are permanent: `isPermanentBranch`/`mergePrArgs`
+  in `github.mts` drop `--delete-branch` for them, mirrored in the
+  conversational-prd overlay's `shared.ts` for the PRD merge.
+- The main loop prints one nudge per open release issue (outcome from the
+  newest marker + next command) — nudges, never gates.
+- Drift guards in `ReleaseWorkflow.test.ts`: the body template embedded in
+  `/new-release` must parse with the module, and every marker the
+  `/cut-release` runbook posts must be one the preflight prints from the
+  module.
+
 ## Template housekeeping: Opus 5, quiet installs (`feat/template-housekeeping`)
 
 Small generic changes that accumulated while dogfooding on a real repo.
