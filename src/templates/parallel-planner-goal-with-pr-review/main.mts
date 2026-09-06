@@ -69,6 +69,7 @@ import {
   PARENT_CLOSE_MARKER,
   type PrdPrHead,
 } from "./prd-lane.mts";
+import { releaseOutcome } from "./release-lane.mts";
 import { logStep, timed } from "./timing.mts";
 import { printHelp, runDoctor, runInit } from "./setup.mts";
 import {
@@ -293,7 +294,9 @@ ${detailSections}
 
 // Push a branch from the sandbox's worktree checkout. Runs on the host so
 // agents never need push credentials; PR authorship (the bot) is what GitHub
-// shows regardless of who pushes.
+// shows regardless of who pushes. (Release cuts push their own branch and
+// tag, but those run in the owner's session via /cut-release — prd/009 —
+// not in a sandbox.)
 const pushBranch = async (worktreePath: string, branch: string) => {
   // Lease against the remote's ACTUAL tip, read explicitly via ls-remote.
   // A bare/refname --force-with-lease leases against this machine's
@@ -726,6 +729,41 @@ const runPrdLane = async (): Promise<void> => {
 };
 
 // ---------------------------------------------------------------------------
+// Release issues (prd/009): issues labeled `sandcastle:release` (filed only
+// by the /new-release skill) are cut by the owner-invoked /cut-release
+// skill, not by this orchestrator — the skill runs release-lane.mts's
+// preflight and the runbook in the owner's interactive session, where the
+// long CI waits and the publish hand-off belong. The label is disjoint
+// from `sandcastle`, so the implement lane never sees these issues; this
+// loop only reports them (nudges, never gates — every entry point names
+// the other lanes' pending work).
+// ---------------------------------------------------------------------------
+
+const nudgeReleaseLane = async (): Promise<void> => {
+  let issues: github.ReleaseIssueInfo[];
+  try {
+    issues = await github.listReleaseIssues();
+  } catch {
+    return; // no gh / no label yet — best-effort at startup
+  }
+  for (const issue of issues) {
+    const outcome = await github
+      .issueCommentsJson(issue.number)
+      .then((json) => releaseOutcome(json))
+      .catch(() => null);
+    const state =
+      outcome === null
+        ? "state unknown"
+        : outcome.level === "ok"
+          ? `${outcome.text} — publish the draft yourself (\`gh release edit v<version> --draft=false\`)`
+          : outcome.level === "failed"
+            ? `${outcome.text} — fix flows through this loop; then re-run \`/cut-release ${issue.number}\``
+            : `${outcome.text} — run \`/cut-release ${issue.number}\` in Claude Code`;
+    console.log(`ℹ release lane: #${issue.number} "${issue.title}" — ${state}`);
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
 
@@ -734,6 +772,7 @@ warnEmptyVerifyCommands();
 await warnNonDefaultBranch();
 await nudgeConversationalLanes();
 await runPrdLane();
+await nudgeReleaseLane();
 
 // Image-gap nudge (prd/006): logs modified after this instant belong to
 // this run's scan window.

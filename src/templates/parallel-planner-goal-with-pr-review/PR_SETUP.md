@@ -35,15 +35,16 @@ decisions, files touched — with all branch commits preserved for history
 
 ## The label protocol
 
-| Label                       | Goes on | Who sets it                                                      | Meaning                                       |
-| --------------------------- | ------- | ---------------------------------------------------------------- | --------------------------------------------- |
-| `sandcastle`                | issue   | you                                                              | queue this issue for the loop                 |
-| `sandcastle:require-pr`     | issue   | you                                                              | gate it behind a PR + outer review            |
-| `sandcastle:agent-approve`  | issue   | you                                                              | same PR flow, reviewer agent approves for you |
-| `sandcastle:in-review`      | PR      | orchestrator                                                     | agent debate in progress                      |
-| `sandcastle:ready`          | PR      | orchestrator                                                     | debate settled, awaiting you                  |
-| `sandcastle:needs-decision` | PR      | orchestrator                                                     | deadlocked threads await your verdict         |
-| `sandcastle:approved`       | PR      | you — or the reviewer agent on `sandcastle:agent-approve` issues | authorize the merge — next run squash-merges  |
+| Label                       | Goes on | Who sets it                                                      | Meaning                                             |
+| --------------------------- | ------- | ---------------------------------------------------------------- | --------------------------------------------------- |
+| `sandcastle`                | issue   | you                                                              | queue this issue for the loop                       |
+| `sandcastle:require-pr`     | issue   | you                                                              | gate it behind a PR + outer review                  |
+| `sandcastle:agent-approve`  | issue   | you                                                              | same PR flow, reviewer agent approves for you       |
+| `sandcastle:release`        | issue   | the `/new-release` skill                                         | release request — you cut it via `/cut-release <n>` |
+| `sandcastle:in-review`      | PR      | orchestrator                                                     | agent debate in progress                            |
+| `sandcastle:ready`          | PR      | orchestrator                                                     | debate settled, awaiting you                        |
+| `sandcastle:needs-decision` | PR      | orchestrator                                                     | deadlocked threads await your verdict               |
+| `sandcastle:approved`       | PR      | you — or the reviewer agent on `sandcastle:agent-approve` issues | authorize the merge — next run squash-merges        |
 
 The merge gate is code-enforced: `sandcastle:approved` present AND zero
 unresolved review threads. The orchestrator lazily creates its own status

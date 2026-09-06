@@ -1,5 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { extractTag, parsePrView, parseThreads } from "./github.mts";
+import {
+  extractTag,
+  isPermanentBranch,
+  mergePrArgs,
+  parsePrView,
+  parseThreads,
+} from "./github.mts";
+
+describe("isPermanentBranch (prd/009 R14)", () => {
+  it("classifies release/* branches as permanent", () => {
+    expect(isPermanentBranch("release/v0.5.0")).toBe(true);
+    expect(isPermanentBranch("release/v1.2.3-beta.1")).toBe(true);
+  });
+
+  it("leaves every other branch deletable", () => {
+    expect(isPermanentBranch("sandcastle/issue-42")).toBe(false);
+    expect(isPermanentBranch("main")).toBe(false);
+    expect(isPermanentBranch("releases/x")).toBe(false);
+    expect(isPermanentBranch("my-release/v1")).toBe(false);
+  });
+});
+
+describe("mergePrArgs (prd/009 R14)", () => {
+  it("omits --delete-branch for a release/* head so the branch survives", () => {
+    expect(mergePrArgs("41", "release/v0.5.0")).toEqual([
+      "pr", "merge", "41", "--squash",
+    ]);
+  });
+
+  it("keeps delete-on-merge for every other head", () => {
+    expect(mergePrArgs("41", "sandcastle/issue-42")).toEqual([
+      "pr", "merge", "41", "--squash", "--delete-branch",
+    ]);
+  });
+});
 
 describe("extractTag", () => {
   it("extracts and trims the first tagged block", () => {

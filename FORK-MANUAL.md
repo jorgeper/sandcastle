@@ -296,6 +296,46 @@ There's no `sandcastle:requires-prd` npm script — this lane lives entirely
 inside `npm run sandcastle` and the `/new-prd` skill; there's no separate
 conversation to start, resume, or detach from.
 
+## Release lane (issue → verified draft, cut in your session)
+
+Releases follow the same shape as every other lane — a labeled issue,
+pure classification, phase markers on the issue, a human act at the end
+— except the executor is **you in Claude Code**, not a sandbox: the full
+gate and CI watches outlive a sandbox turn, and publishing wants a human
+anyway.
+
+1. `/new-release` in Claude Code. It interviews you (version, optional
+   targets, highlights — one question at a time; you name the version,
+   it only tells you the newest tag), drafts the changelog from commits
+   and closed issues since the last tag, loops until you **explicitly
+   approve** the text, then files a `sandcastle:release` issue with a
+   machine-parseable body. It never starts the cut.
+2. `/cut-release <n>`. Preflight runs `.sandcastle/release-lane.mts`
+   (strict semver, prerelease-aware ordering guard, abandoned-draft
+   report, parked-on-open-bug), then the runbook: `release/v<version>`
+   branch → version bump → changelog → gate (`VERIFY_COMMANDS`) →
+   push + pre-tag CI → tag + merge-back → release workflow → draft
+   verified → appended artifacts → **awaiting publish**. Each phase is
+   one marker comment on the issue; re-invoking resumes from the first
+   missing marker after cross-checking reality. A failure files a
+   `sandcastle` bug (`Blocked-by: #<bug>` on the issue) and parks the
+   cut until that bug closes — the fix flows through `npm run sandcastle`.
+3. You publish (`gh release edit v<version> --draft=false`). Nothing in
+   the fork ever does.
+
+**First cut on a repo:** fill the `release-facts` block at the top of
+`.claude/skills/cut-release/SKILL.md` (bump command, changelog file,
+extra pre-gate steps, gate, CI workflow names, expected assets, append
+workflows per target, tag message, target names). Every line still
+reading `TODO(sandcastle)` stops the cut with a request to you — the
+skill never guesses a release mechanic. Init never overwrites a filled-in
+skill. `release/*` branches are permanent: no merge path in the fork
+passes `--delete-branch` for them.
+
+`npm run sandcastle` prints one nudge per open release issue (its
+outcome from the newest marker, and the next command) and otherwise
+leaves the lane alone.
+
 ## Lane 3 — Implement (labeled issues → merged code)
 
 `npm run sandcastle`. Before planning, it **nudges** you about open
@@ -328,6 +368,7 @@ implementers run in goal mode, reviewer/merger land the work.
 | Build the backlog              | `npm run sandcastle`                                                                                             |
 | Gate an impl issue behind a PR | Label it `sandcastle:require-pr`                                                                                 |
 | Get the PR without the wait    | Label it `sandcastle:agent-approve` — the reviewer approves in your place                                        |
+| Cut a release                  | `/new-release` (files the issue), then `/cut-release <n>`; you publish the verified draft                        |
 | See what agents are doing      | `tail -f .sandcastle/logs/conversation-<id>.log`; transcripts in `.sandcastle/conversations/<id>/messages.jsonl` |
 
 **Who wrote that?** Everything an agent writes on GitHub under your
@@ -364,5 +405,7 @@ npm run sandcastle:design                   # picker / re-attach (free text = ne
 npm run sandcastle:decompose                # decompose lane (picker)
 npm run sandcastle                          # implement lane (main loop)
 gh pr edit <pr> --add-label "sandcastle:approved"        # approve any gated PR
+/new-release                                # Claude Code: interview → changelog → sandcastle:release issue
+/cut-release <n>                            # Claude Code: cut to a verified draft; you publish
 gh issue create --label sandcastle:design --title "PRD: …"   # queue a design by hand
 ```

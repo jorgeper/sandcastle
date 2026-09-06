@@ -250,7 +250,7 @@ remind the user of the approval command above. The PR thread is the
 memory — nothing else tracks this conversation.
 `;
 
-interface ScaffoldFile {
+export interface ScaffoldFile {
   readonly relativePath: string;
   readonly content: string;
 }
@@ -276,10 +276,10 @@ const ISSUE_ANCHORED_FILES: readonly ScaffoldFile[] = [
 ];
 
 /**
- * Private helper to write scaffold files to the repo. Never overwrites: a file
- * that already exists is left untouched.
+ * Write scaffold files to the repo. Never overwrites: a file that already
+ * exists is left untouched. Shared with ReleaseWorkflow.ts.
  */
-const scaffoldFiles = (
+export const scaffoldFiles = (
   repoDir: string,
   files: readonly ScaffoldFile[],
 ): Effect.Effect<void, Error, FileSystem.FileSystem> =>

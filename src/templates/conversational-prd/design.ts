@@ -30,6 +30,7 @@ import {
   preflight,
   pullFastForward,
   laneNudge,
+  mergePrCommand,
 } from "./shared.ts";
 
 // Designer lane — re-entrant, no resident process (same shape as the main
@@ -139,7 +140,10 @@ const sweepPr = async (conversationId: string): Promise<void> => {
     comments: PrComment[];
     reviews: PrComment[];
     labels: Array<{ name?: string }>;
-  }>(`pr view ${prUrl} --json state,reviewDecision,comments,reviews,labels`);
+    headRefName: string;
+  }>(
+    `pr view ${prUrl} --json state,reviewDecision,comments,reviews,labels,headRefName`,
+  );
 
   console.log(`\nPRD PR ${prUrl} [issue #${designIssue}]:`);
 
@@ -162,7 +166,8 @@ const sweepPr = async (conversationId: string): Promise<void> => {
   if (approved) {
     console.log("  sandcastle:approved — merging…");
     try {
-      gh(`pr merge ${prUrl} --squash --delete-branch`);
+      // prd/009 R14: a permanent release/* head survives its merge.
+      gh(mergePrCommand(prUrl, view.headRefName));
       console.log("  merged.");
       if (pullFastForward()) console.log("  local checkout fast-forwarded.");
       createHandoffIssue(prdFileOf(convo), designIssue);
