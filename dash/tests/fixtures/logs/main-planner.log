@@ -1,0 +1,8 @@
+--- Run started: 2026-09-06T18:03:41.835Z ---
+[18:03:41] Sandcastle Run
+  Agent: planner
+  Sandbox: docker
+  Max iterations: 1
+[18:03:41] Iteration 1/1
+[18:03:41] Git worktree operation failed: Provider 'docker' create failed: Image 'sandcastle:marky-mark' not found locally.
+[18:03:42] Run failed: sandbox could not start.

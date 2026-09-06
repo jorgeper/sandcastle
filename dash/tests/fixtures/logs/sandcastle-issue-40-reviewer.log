@@ -1,0 +1,11 @@
+--- Run started: 2026-09-06T17:00:00.000Z ---
+[17:00:00] Iteration 1/1
+[17:00:00] Agent started
+[17:00:05] Bash(npm run validate:quick)
+node:internal/process/promises:391
+    triggerUncaughtException(err, true /* fromPromise */);
+    ^
+TypeError: Cannot read properties of undefined (reading 'branch')
+    at file:///workspace/.sandcastle/main.ts:1201:30
+
+Node.js v22.23.1
