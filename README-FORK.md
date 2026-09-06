@@ -6,6 +6,24 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Missing branch is never "merged" (`feat/missing-branch-safety`)
+
+Found dogfooding on a real repo: a lane died before its branch synced back
+to the host checkout, `branchAheadCount` reported 0 for the nonexistent
+branch, and the orchestrator read that as "already merged" — the issue was
+closed while its fix sat on an unmerged branch.
+
+**What was added**
+
+- `branchAheadCount` returns `null` for a branch that does not exist
+  locally; 0 now means only "fully merged". No caller may treat `null` as
+  merged.
+- A `sandcastle:ready-to-merge` issue whose branch is missing is re-queued
+  as an implementation candidate (with a warning) instead of being carried
+  to merge and closed.
+- The post-merge close safety net skips issues whose branch has vanished
+  between merge input and the close check.
+
 ## Agent-approved PRs + one shared review bar (`feat/agent-approval`)
 
 Two changes to the goal template's review layer, both about the same thing:
