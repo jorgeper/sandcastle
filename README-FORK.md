@@ -6,6 +6,25 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Multi-machine-safe pushes (`feat/multi-machine-push`)
+
+Running the same repo's lanes from two machines (laptop + VPS) broke two
+pushes in the goal template.
+
+**What was added**
+
+- Lane branches are pushed with `--force-with-lease=<branch>:<sha>`, the
+  sha read explicitly via `git ls-remote`. A bare `--force-with-lease`
+  leases against this machine's remote-tracking ref, which is routinely
+  stale when another machine pushed last, and the push died with
+  "(stale info)" even though replacing the tip was the intent. The
+  explicit form is a true compare-and-swap on the tip just observed.
+- The merger's push of the target branch fetches and merges the remote
+  tip first (merge, never force — the branch is shared), and a rejected
+  push logs and falls through instead of crashing the loop after the
+  merger already closed issues. A conflicted merge is aborted so it cannot
+  leak into later phases.
+
 ## Missing branch is never "merged" (`feat/missing-branch-safety`)
 
 Found dogfooding on a real repo: a lane died before its branch synced back

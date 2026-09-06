@@ -294,8 +294,21 @@ ${detailSections}
 // agents never need push credentials; PR authorship (the bot) is what GitHub
 // shows regardless of who pushes.
 const pushBranch = async (worktreePath: string, branch: string) => {
+  // Lease against the remote's ACTUAL tip, read explicitly via ls-remote.
+  // A bare/refname --force-with-lease leases against this machine's
+  // remote-tracking ref — and these branches can be pushed from more than
+  // one machine (laptop + VPS), so that ref is routinely stale and the push
+  // dies with "(stale info)" even though replacing the tip is exactly what
+  // the lane intends. <branch>:<sha> is a true compare-and-swap on what we
+  // just observed (empty sha = "must not exist yet"): we knowingly replace
+  // the tip we saw, and still refuse to clobber anything pushed in the
+  // moment between ls-remote and push.
+  const { stdout } = await execFileAsync("git", [
+    "-C", worktreePath, "ls-remote", "origin", `refs/heads/${branch}`,
+  ]);
+  const remoteTip = stdout.trim().split(/\s+/)[0] ?? "";
   await execFileAsync("git", [
-    "-C", worktreePath, "push", "--force-with-lease", "-u", "origin", branch,
+    "-C", worktreePath, "push", `--force-with-lease=${branch}:${remoteTip}`, "-u", "origin", branch,
   ]);
 };
 
@@ -1295,7 +1308,27 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
   // PR-mode branches fork from local HEAD but their PR diffs are computed
   // against origin/master — keep the remote in sync with local merges.
-  await execFileAsync("git", ["push", "origin", TARGET_BRANCH]);
+  // A bare push races the other machines (and GitHub-side PR merges) on the
+  // target branch, and a rejection here crashed the whole loop with the
+  // merger's issue-closes already done — the merges stranded locally.
+  // Integrate the remote tip first — merge, never force: the target branch
+  // is shared — and on failure log and fall through; the next cycle's push
+  // retries.
+  try {
+    await execFileAsync("git", ["fetch", "origin", TARGET_BRANCH]);
+    try {
+      await execFileAsync("git", ["merge", "--no-edit", `origin/${TARGET_BRANCH}`]);
+    } catch (error) {
+      // A conflicted merge must not leak into later phases' working tree.
+      await execFileAsync("git", ["merge", "--abort"]).catch(() => {});
+      throw error;
+    }
+    await execFileAsync("git", ["push", "origin", TARGET_BRANCH]);
+  } catch (error) {
+    console.error(
+      `  ✗ push of ${TARGET_BRANCH} failed: ${error instanceof Error ? error.message : error} — continuing; local merges are intact and the next cycle retries the push.`,
+    );
+  }
 
   // The merger's state-advance is the issue close, and an agent can miss it
   // (it happened: a merged branch's issue stayed open, so the classifier
