@@ -404,6 +404,7 @@ npm run sandcastle:design -- "idea"         # design lane (files the issue)
 npm run sandcastle:design                   # picker / re-attach (free text = new topic)
 npm run sandcastle:decompose                # decompose lane (picker)
 npm run sandcastle                          # implement lane (main loop)
+sandcastle-dash                             # terminal dashboard: running, recent, queued (dash/README.md)
 gh pr edit <pr> --add-label "sandcastle:approved"        # approve any gated PR
 /new-release                                # Claude Code: interview → changelog → sandcastle:release issue
 /cut-release <n>                            # Claude Code: cut to a verified draft; you publish

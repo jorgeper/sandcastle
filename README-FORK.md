@@ -6,6 +6,15 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Terminal dashboard: `sandcastle-dash` (`feat/dash`)
+
+Implements prd/010. A Python/Textual TUI under `dash/`, installed with
+`uv tool install --editable ./dash`, that watches a goal-template checkout
+from the terminal: the running loop and its agents, the last 24 h of runs
+with outcomes and errors, the issue queue with effort tiers and a stage per
+issue, and 7-day stats. Read-only, local files plus `gh`/`git`; the
+TypeScript library is untouched. See `dash/README.md`.
+
 ## Release lane: issue-driven releases, cut in your session (`feat/release-lane`)
 
 Implements prd/009 (decision record: ADR 0024). Ported from a dogfooding
