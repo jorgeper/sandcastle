@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { interpretPickerAnswer, summarizeTitle } from "./shared.ts";
+import {
+  interpretPickerAnswer,
+  isPermanentBranch,
+  mergePrCommand,
+  summarizeTitle,
+} from "./shared.ts";
+
+describe("mergePrCommand (prd/009 R14 mirror of github.mts)", () => {
+  it("keeps delete-on-merge for ordinary heads", () => {
+    expect(mergePrCommand("https://x/pull/7", "prd/issue-3-thing")).toBe(
+      "pr merge https://x/pull/7 --squash --delete-branch",
+    );
+  });
+
+  it("never deletes a permanent release/* head", () => {
+    expect(isPermanentBranch("release/v1.0.0")).toBe(true);
+    expect(mergePrCommand("7", "release/v1.0.0")).toBe("pr merge 7 --squash");
+  });
+});
 
 describe("summarizeTitle", () => {
   it("returns short text unchanged", () => {

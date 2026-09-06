@@ -1,0 +1,409 @@
+// Release preflight (prd/009): pure classification for `sandcastle:release`
+// issues. Every state is derived from GitHub alone — issue body, tag list,
+// release list, existing comments. The impure executor is the owner-invoked
+// /cut-release skill (.claude/skills/cut-release), which calls this module
+// at preflight; everything here is unit-testable, no `gh` or fs calls.
+
+// prd/009 R3: the structured, machine-parseable release-issue body. The
+// contract is what `/new-release` files and `/cut-release` reads; this
+// module is its one parser.
+export interface ReleaseSpec {
+  /** Strict semver, pre-release id kept, no leading `v` (the tag adds it). */
+  version: string;
+  /** Free-form target names from the optional `**Targets:**` line (e.g.
+   * platforms, packages, artifacts) — informational for the runbook;
+   * empty when the line is absent. */
+  targets: string[];
+  /** `cut` (default) cuts tag `v<version>`; `append` adds artifacts for
+   * `targets` to an existing release of that version (R13). */
+  mode: "cut" | "append";
+  /** The approved changelog entry, verbatim markdown. */
+  changelog: string;
+}
+
+export type ParsedReleaseBody =
+  | { ok: true; spec: ReleaseSpec }
+  | { ok: false; problems: string[] };
+
+// Strict semver: MAJOR.MINOR.PATCH with an optional pre-release id. No
+// leading `v`, no build metadata — the body carries what the version bump
+// and the tag consume.
+const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+
+const MODE_VALUES = ["cut", "append"] as const;
+
+/** Contents of the `## Changelog` section: everything after the heading up
+ * to the next `## ` heading (or EOF), trimmed. Null when the heading is
+ * absent. */
+const changelogSection = (body: string): string | null => {
+  const heading = body.match(/^## Changelog[ \t]*\r?\n/m);
+  if (heading === null || heading.index === undefined) return null;
+  const rest = body.slice(heading.index + heading[0].length);
+  const next = rest.match(/^## /m);
+  return (next?.index !== undefined ? rest.slice(0, next.index) : rest).trim();
+};
+
+const fieldLine = (body: string, name: string): string | null => {
+  const m = body.match(new RegExp(`^\\*\\*${name}:\\*\\*[ \\t]*(.*?)[ \\t]*$`, "m"));
+  return m?.[1] ?? null;
+};
+
+/** prd/009 R3: parse the release-issue body. Collects every problem instead
+ * of stopping at the first, so the guard comment names all of them at once. */
+export const parseReleaseIssueBody = (body: string): ParsedReleaseBody => {
+  const problems: string[] = [];
+
+  const version = fieldLine(body, "Version");
+  if (version === null || version === "") {
+    problems.push("missing a `**Version:** <semver>` line");
+  } else if (!SEMVER_RE.test(version)) {
+    problems.push(
+      /^v\d/.test(version)
+        ? `version \`${version}\` carries a leading \`v\` — the body holds the bare semver (the tag adds the \`v\`)`
+        : `version \`${version}\` is not strict semver (MAJOR.MINOR.PATCH with an optional pre-release id, e.g. \`1.2.0-beta.1\`)`,
+    );
+  }
+
+  // Optional: absent or empty means "no named targets".
+  const targetsLine = fieldLine(body, "Targets");
+  const targets =
+    targetsLine === null || targetsLine === ""
+      ? []
+      : targetsLine
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+
+  // Optional: absent means `cut`.
+  const modeLine = fieldLine(body, "Mode");
+  let mode: ReleaseSpec["mode"] = "cut";
+  if (modeLine !== null && modeLine !== "") {
+    if ((MODE_VALUES as readonly string[]).includes(modeLine)) {
+      mode = modeLine as ReleaseSpec["mode"];
+    } else {
+      problems.push(
+        `unknown mode \`${modeLine}\` — expected exactly \`cut\` or \`append\` (or omit the line for \`cut\`)`,
+      );
+    }
+  }
+  if (mode === "append" && targets.length === 0) {
+    problems.push(
+      "`**Mode:** append` needs a `**Targets:**` line naming what to append to the existing release",
+    );
+  }
+
+  const changelog = changelogSection(body);
+  if (changelog === null) {
+    problems.push("missing the `## Changelog` section");
+  } else if (changelog === "") {
+    problems.push("the `## Changelog` section is empty");
+  }
+
+  if (problems.length > 0) return { ok: false, problems };
+  return {
+    ok: true,
+    spec: {
+      version: version as string,
+      targets,
+      mode,
+      changelog: changelog as string,
+    },
+  };
+};
+
+// ---------------------------------------------------------------------------
+// prd/009 R6: prerelease-aware semver ordering.
+// ---------------------------------------------------------------------------
+
+export interface ParsedVersion {
+  major: number;
+  minor: number;
+  patch: number;
+  /** `undefined` = a full release, which outranks all of its pre-releases. */
+  prerelease?: string[];
+}
+
+/** Accepts an optional leading `v` (tag names carry one); returns null —
+ * never throws — for anything unparseable, e.g. a rolling `latest` tag. */
+export const parseVersion = (version: unknown): ParsedVersion | null => {
+  if (typeof version !== "string") return null;
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+    version.trim(),
+  );
+  if (!m) return null;
+  return {
+    major: Number(m[1]),
+    minor: Number(m[2]),
+    patch: Number(m[3]),
+    prerelease: m[4] === undefined ? undefined : m[4].split("."),
+  };
+};
+
+/** Semver precedence: -1 if a < b, 0 if equal, 1 if a > b. Throws on input
+ * that does not parse (callers that tolerate junk use parseVersion first). */
+export const compareVersions = (a: string, b: string): -1 | 0 | 1 => {
+  const pa = parseVersion(a);
+  const pb = parseVersion(b);
+  if (!pa) throw new Error(`compareVersions: unparseable version ${JSON.stringify(a)}`);
+  if (!pb) throw new Error(`compareVersions: unparseable version ${JSON.stringify(b)}`);
+
+  for (const part of ["major", "minor", "patch"] as const) {
+    if (pa[part] !== pb[part]) return pa[part] < pb[part] ? -1 : 1;
+  }
+  // 1.4.0 > 1.4.0-beta.5: a release outranks its own pre-releases.
+  if (!pa.prerelease && !pb.prerelease) return 0;
+  if (!pa.prerelease) return 1;
+  if (!pb.prerelease) return -1;
+
+  for (let i = 0; i < Math.max(pa.prerelease.length, pb.prerelease.length); i++) {
+    const ia = pa.prerelease[i];
+    const ib = pb.prerelease[i];
+    // A shorter set of identifiers loses: beta < beta.1.
+    if (ia === undefined) return -1;
+    if (ib === undefined) return 1;
+    if (ia === ib) continue;
+    const na = /^\d+$/.test(ia);
+    const nb = /^\d+$/.test(ib);
+    // Numeric identifiers compare numerically (beta.10 > beta.9, not
+    // '10' < '9') and always rank below alphanumeric ones.
+    if (na && nb) return Number(ia) < Number(ib) ? -1 : 1;
+    if (na !== nb) return na ? -1 : 1;
+    return ia < ib ? -1 : 1;
+  }
+  return 0;
+};
+
+/** Newest release tag among `tagNames` by semver precedence. Unparseable
+ * names (a rolling `latest` tag, random branches-as-tags) are ignored.
+ * Input: parseTagNames(...) below, or any tag listing. */
+export const newestReleaseTag = (tagNames: string[]): string | null => {
+  const parseable = tagNames.filter((t) => parseVersion(t) !== null);
+  if (parseable.length === 0) return null;
+  return parseable.reduce((a, b) => (compareVersions(a, b) >= 0 ? a : b));
+};
+
+// ---------------------------------------------------------------------------
+// Raw-JSON parsers (gh output in, plain data out — same shape as prd-lane).
+// ---------------------------------------------------------------------------
+
+/** Input: `gh api repos/<slug>/tags` (a JSON array of `{ name }`). */
+export const parseTagNames = (json: string): string[] =>
+  (JSON.parse(json) as { name?: string }[]).map((t) => t.name ?? "").filter(Boolean);
+
+/** Input: `gh release list --json tagName,isDraft`. Returns draft tags only. */
+export const parseDraftTags = (json: string): string[] =>
+  (JSON.parse(json) as { tagName?: string; isDraft?: boolean }[])
+    .filter((r) => r.isDraft === true)
+    .map((r) => r.tagName ?? "")
+    .filter(Boolean);
+
+/** Input: `gh issue view <n> --json comments`. Generalizes prd-lane's
+ * parseCloseMarkerPresent: guard comments are posted once per marker. */
+export const parseMarkerPresent = (json: string, marker: string): boolean => {
+  const view = JSON.parse(json) as { comments?: { body?: string }[] };
+  return (view.comments ?? []).some((c) => (c.body ?? "").includes(marker));
+};
+
+// ---------------------------------------------------------------------------
+// prd/009 R10: failure-flow parsing. A failed cut's comment links the bug
+// that blocks it; the outcome of a cut is read back from the newest phase
+// marker rather than trusted from process exit.
+// ---------------------------------------------------------------------------
+
+const PHASE_MARKERS = (): string[] => [
+  MALFORMED_MARKER,
+  OUT_OF_ORDER_MARKER,
+  DRAFT_REPORT_MARKER,
+  PREFLIGHT_ACK_MARKER,
+  GATE_PASSED_MARKER,
+  PRETAG_CI_GREEN_MARKER,
+  CUT_FAILED_MARKER,
+  TAG_PUSHED_MARKER,
+  CI_GREEN_MARKER,
+  DRAFT_VERIFIED_MARKER,
+  ARTIFACTS_APPENDED_MARKER,
+  AWAITING_PUBLISH_MARKER,
+];
+
+/** The bug number from the `Blocked-by: #<n>` line of the newest
+ * cut-failed comment; null when no cut-failed comment or no line. */
+export const parseBlockedBy = (json: string): number | null => {
+  const view = JSON.parse(json) as { comments?: { body?: string }[] };
+  const all = view.comments ?? [];
+  for (let i = all.length - 1; i >= 0; i--) {
+    const body = all[i]?.body ?? "";
+    if (body.trimStart().startsWith(CUT_FAILED_MARKER)) {
+      const m = body.match(/^Blocked-by: #(\d+)\s*$/m);
+      return m ? Number(m[1]) : null;
+    }
+  }
+  return null;
+};
+
+export interface ReleaseOutcome {
+  level: "ok" | "failed" | "incomplete";
+  text: string;
+}
+
+/** The cut's semantic outcome, from the newest comment that starts with a
+ * phase marker. Only awaiting-publish is terminal success; a cut-failed
+ * newest marker is a failed cut; anything else means the cut stopped
+ * mid-flight. */
+export const releaseOutcome = (json: string): ReleaseOutcome => {
+  const view = JSON.parse(json) as { comments?: { body?: string }[] };
+  let last: string | null = null;
+  for (const comment of view.comments ?? []) {
+    const body = (comment.body ?? "").trimStart();
+    const marker = PHASE_MARKERS().find((m) => body.startsWith(m));
+    if (marker !== undefined) last = marker;
+  }
+  if (last === AWAITING_PUBLISH_MARKER)
+    return { level: "ok", text: "cut complete, awaiting publish" };
+  if (last === CUT_FAILED_MARKER) return { level: "failed", text: "cut failed" };
+  return {
+    level: "incomplete",
+    text: last === null ? "no phase marker posted" : `stopped after "${last}"`,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Guard comments. Each carries a recognizable first line (the
+// PARENT_CLOSE_MARKER pattern from prd-lane) so a later /cut-release
+// invocation re-classifying the same unchanged issue detects the existing
+// comment and does not spam the thread.
+// ---------------------------------------------------------------------------
+
+export const MALFORMED_MARKER = "🏰 Sandcastle releaser: malformed release request";
+export const OUT_OF_ORDER_MARKER = "🏰 Sandcastle releaser: version refused by the ordering guard";
+export const DRAFT_REPORT_MARKER = "🏰 Sandcastle releaser: abandoned draft releases";
+
+// prd/009 R14: the release issue is the running log of the cut — every phase
+// transition the /cut-release skill completes lands as exactly one comment
+// beginning with one of these fixed lines. They are deliberately stable text
+// (resume detection via parseMarkerPresent depends on it); the skill's
+// preflight script prints them from this module, so the comments it posts
+// can never drift from what the classifier below matches. None of the
+// markers in this file may contain another (substring matching would then
+// misfire) — a unit test holds that invariant.
+export const PREFLIGHT_ACK_MARKER = "🏰 Sandcastle releaser: preflight acknowledged";
+export const GATE_PASSED_MARKER = "🏰 Sandcastle releaser: gate passed";
+/** prd/009 R9: pre-tag branch CI green — posted between the gate-passed and
+ * tag-pushed markers; the tag is only spent after it. */
+export const PRETAG_CI_GREEN_MARKER = "🏰 Sandcastle releaser: pre-tag CI green";
+/** prd/009 R10: the one failure comment — a failed gate (or failed CI run). */
+export const CUT_FAILED_MARKER = "🏰 Sandcastle releaser: cut failed";
+export const TAG_PUSHED_MARKER = "🏰 Sandcastle releaser: tag pushed";
+export const CI_GREEN_MARKER = "🏰 Sandcastle releaser: CI green";
+export const DRAFT_VERIFIED_MARKER = "🏰 Sandcastle releaser: draft verified";
+/** prd/009 R13: extra artifacts (an `append` cut, or the second target set
+ * of a multi-target cut) attached to the release and re-verified. */
+export const ARTIFACTS_APPENDED_MARKER = "🏰 Sandcastle releaser: artifacts appended";
+/** prd/009 R12: the final hand-over — after this, only the human publishes. */
+export const AWAITING_PUBLISH_MARKER = "🏰 Sandcastle releaser: cut complete, awaiting publish";
+
+/** prd/009 R5: one explanatory comment naming every parse problem. */
+export const buildMalformedComment = (problems: string[]): string =>
+  [
+    MALFORMED_MARKER,
+    "",
+    "The issue body does not parse as a release request, so preflight stopped before touching anything:",
+    "",
+    ...problems.map((p) => `- ${p}`),
+    "",
+    "The expected format is what `/new-release` files (parsed by `parseReleaseIssueBody` in `.sandcastle/release-lane.mts`). Re-file via `/new-release` (or edit the body) and re-run `/cut-release`.",
+  ].join("\n");
+
+/** prd/009 R6: refusal for a version at or behind the newest existing tag —
+ * cutting backwards silently republishes an older build as "latest". */
+export const buildOutOfOrderComment = (version: string, newest: string): string =>
+  [
+    OUT_OF_ORDER_MARKER,
+    "",
+    `Refusing to cut \`${version}\`: the newest existing tag is \`${newest}\`, and the requested version is not newer (prerelease-aware semver compare). Cutting backwards would publish an older version on top of a newer one.`,
+    "",
+    "Pick a version newer than the newest tag, update the issue body, and re-run `/cut-release` to re-classify.",
+  ].join("\n");
+
+/** prd/009 R7: report abandoned draft releases with the exact deletion
+ * commands. Reporting only — no code path here deletes a release. */
+export const buildDraftReport = (draftTags: string[]): string =>
+  [
+    DRAFT_REPORT_MARKER,
+    "",
+    `Preflight found ${draftTags.length} abandoned draft release(s). To delete one, run the command yourself — the cut never deletes a release:`,
+    "",
+    ...draftTags.map((t) => `- \`gh release delete ${t}\``),
+  ].join("\n");
+
+// ---------------------------------------------------------------------------
+// Classification.
+// ---------------------------------------------------------------------------
+
+export type ReleaseAction =
+  | { kind: "malformed"; problems: string[] }
+  | { kind: "awaiting-publish"; spec: ReleaseSpec }
+  | { kind: "parked"; bug: number | null }
+  | { kind: "append"; spec: ReleaseSpec }
+  | { kind: "out-of-order"; version: string; newestTag: string }
+  | { kind: "drafts-to-report"; spec: ReleaseSpec; drafts: string[] }
+  | { kind: "proceed"; spec: ReleaseSpec };
+
+/** The preflight state machine of prd/009 R5–R13. Guards dominate in order:
+ * a body that does not parse ends preflight (R5); a fully-verified cut whose
+ * awaiting-publish comment exists needs no work at all — only the human
+ * publish remains (R12), and its own tag would otherwise trip the ordering
+ * guard; a cut whose newest marker is cut-failed is parked until its
+ * blocking bug closes (R10); a cut that already posted its tag-pushed
+ * comment is mid-flight, so it resumes rather than being refused over its
+ * own tag; an `append` request whose tag already exists appends artifacts
+ * to that release, bypassing the ordering guard for exactly that case
+ * (R13 — a `cut` for an existing version still refuses); a version at or
+ * behind the newest tag is refused (R6); unreported abandoned drafts are
+ * surfaced once (R7) — informational, the caller posts the report and the
+ * cut still proceeds; otherwise the issue proceeds to the cut itself. */
+export const classifyReleaseIssue = (input: {
+  body: string;
+  tagNames: string[];
+  draftTags: string[];
+  /** DRAFT_REPORT_MARKER already present among the issue's comments. */
+  draftReportPosted: boolean;
+  /** AWAITING_PUBLISH_MARKER already present among the issue's comments. */
+  awaitingPublishPosted: boolean;
+  /** TAG_PUSHED_MARKER already present among the issue's comments. */
+  tagPushedPosted: boolean;
+  /** CUT_FAILED_MARKER is the newest phase marker (the cut failed most recently). */
+  cutFailedActive: boolean;
+  /** The bug number from the Blocked-by line of the newest cut-failed comment; null when no cut-failed comment or no line. */
+  blockedByBug: number | null;
+  /** The resolution state of the blocking bug (if known); null = unknown/unresolvable. */
+  blockingBugOpen: boolean | null;
+}): ReleaseAction => {
+  const parsed = parseReleaseIssueBody(input.body);
+  if (!parsed.ok) return { kind: "malformed", problems: parsed.problems };
+  if (input.awaitingPublishPosted) return { kind: "awaiting-publish", spec: parsed.spec };
+  // R10: a cut whose newest phase marker is cut-failed is dead until its
+  // blocking bug closes. Park unless the linked bug is known-closed; a
+  // missing link or unknown bug state also parks (fail safe: never proceed
+  // at a known-dead cut).
+  if (input.cutFailedActive) {
+    const bugKnownClosed = input.blockedByBug !== null && input.blockingBugOpen === false;
+    if (!bugKnownClosed) return { kind: "parked", bug: input.blockedByBug };
+  }
+  // Mid-flight resume: our own tag push made the version "not newer than the
+  // newest tag", and the release's own draft is not an abandoned one — skip
+  // those checks and let the runbook pick up from its phase markers. Checked
+  // before append: a full cut that pushed its tag resumes as the full cut it
+  // is — a true append issue never posts a tag-pushed marker.
+  if (input.tagPushedPosted) return { kind: "proceed", spec: parsed.spec };
+  if (parsed.spec.mode === "append" && input.tagNames.includes(`v${parsed.spec.version}`)) {
+    return { kind: "append", spec: parsed.spec };
+  }
+  const newest = newestReleaseTag(input.tagNames);
+  if (newest !== null && compareVersions(parsed.spec.version, newest) <= 0) {
+    return { kind: "out-of-order", version: parsed.spec.version, newestTag: newest };
+  }
+  if (input.draftTags.length > 0 && !input.draftReportPosted) {
+    return { kind: "drafts-to-report", spec: parsed.spec, drafts: input.draftTags };
+  }
+  return { kind: "proceed", spec: parsed.spec };
+};

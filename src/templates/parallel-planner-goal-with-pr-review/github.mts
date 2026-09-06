@@ -112,6 +112,55 @@ export const prFilesJson = (prNumber: number): Promise<string> =>
 export const issueCommentsJson = (issueNumber: number): Promise<string> =>
   gh(["issue", "view", String(issueNumber), "--json", "comments"]);
 
+/** prd/009 R10: state of the bug blocking a failed cut. */
+export const issueState = (issueNumber: number): Promise<string> =>
+  gh(["issue", "view", String(issueNumber), "--json", "state", "-q", ".state"]);
+
+// --- Release lane (prd/009) wrappers — raw JSON out, parsing in
+// --- release-lane.mts. Listing is label-scoped so plain-`sandcastle`
+// --- implement classification never sees release issues.
+
+export interface ReleaseIssueInfo extends IssueInfo {
+  body: string;
+}
+
+export const listReleaseIssues = async (): Promise<ReleaseIssueInfo[]> => {
+  const raw = await gh([
+    "issue",
+    "list",
+    "--state",
+    "open",
+    "--label",
+    RELEASE_LABEL,
+    "--limit",
+    "100",
+    "--json",
+    "number,title,labels,body",
+  ]);
+  return (JSON.parse(raw) as any[]).map((issue) => ({
+    number: issue.number,
+    title: issue.title,
+    labels: (issue.labels as any[]).map((label) => label.name),
+    body: issue.body ?? "",
+  }));
+};
+
+// Single page of 100 tags is plenty for the ordering guard: release tags
+// are returned newest-first and only the newest parseable one matters.
+// `-X GET` is explicit because `gh api -F` otherwise switches to POST.
+export const tagsJson = (repo: string): Promise<string> =>
+  gh(["api", "-X", "GET", `repos/${repo}/tags`, "-F", "per_page=100"]);
+
+export const releaseListJson = (): Promise<string> =>
+  gh(["release", "list", "--limit", "100", "--json", "tagName,isDraft"]);
+
+export const postIssueComment = async (
+  issueNumber: number,
+  body: string,
+): Promise<void> => {
+  await gh(["issue", "comment", String(issueNumber), "--body", body]);
+};
+
 export const findLatestPr = async (
   branch: string,
 ): Promise<{ number: number; state: "OPEN" | "MERGED" | "CLOSED" } | null> => {
@@ -219,8 +268,34 @@ export const createPr = async (opts: {
   return Number(match[1]);
 };
 
+// prd/009 R14: release/* branches are permanent — no Sandcastle path (merge,
+// cleanup, or otherwise) may delete them. Every branch-deletion site in this
+// template routes through this predicate. (The conversational-prd overlay
+// carries a mirror in its shared.ts, since it cannot import across
+// templates in the source tree; keep the two in step.)
+export const isPermanentBranch = (branch: string): boolean =>
+  branch.startsWith("release/");
+
+// Pure seam for merge-command construction so tests can assert the deletion
+// exemption without mocking gh. `target` is whatever `gh pr merge` accepts —
+// a PR number or URL.
+export const mergePrArgs = (target: string, headRefName: string): string[] => {
+  const args = ["pr", "merge", target, "--squash"];
+  // prd/009 R14: a permanent release/* head survives its merge.
+  if (!isPermanentBranch(headRefName)) args.push("--delete-branch");
+  return args;
+};
+
+export const prHeadRefName = async (prNumber: number): Promise<string> => {
+  const raw = await gh([
+    "pr", "view", String(prNumber), "--json", "headRefName",
+  ]);
+  return (JSON.parse(raw) as { headRefName: string }).headRefName;
+};
+
 export const mergePr = async (prNumber: number): Promise<void> => {
-  await gh(["pr", "merge", String(prNumber), "--squash", "--delete-branch"]);
+  const headRefName = await prHeadRefName(prNumber);
+  await gh(mergePrArgs(String(prNumber), headRefName));
 };
 
 // GitHub's "Closes #N" auto-close is asynchronous; we close explicitly after
@@ -253,12 +328,14 @@ export const TRIGGER_LABEL = "sandcastle";
 export const REQUIRE_PR_LABEL = "sandcastle:require-pr";
 export const REQUIRES_PRD_LABEL = "sandcastle:requires-prd";
 export const AGENT_APPROVE_LABEL = "sandcastle:agent-approve";
+export const RELEASE_LABEL = "sandcastle:release";
 
 export const TRIGGER_LABEL_DEFS: LabelDef[] = [
   { name: TRIGGER_LABEL, color: "1D76DB", desc: "Queue this issue for the sandcastle loop" },
   { name: REQUIRE_PR_LABEL, color: "0052CC", desc: "Gate this issue behind a PR + outer review" },
   { name: AGENT_APPROVE_LABEL, color: "0052CC", desc: "PR mode, but the reviewer agent approves instead of you" },
   { name: REQUIRES_PRD_LABEL, color: "B60205", desc: "Needs an approved PRD before decompose/implement" },
+  { name: RELEASE_LABEL, color: "006B75", desc: "Release request — filed by /new-release, cut via /cut-release" },
 ];
 
 export type StatusLabel =

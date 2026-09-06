@@ -65,6 +65,18 @@ export const pullFastForward = (): boolean => {
 
 export const ghJson = <T>(args: string): T => JSON.parse(gh(args)) as T;
 
+// prd/009 R14: release/* branches are permanent — no Sandcastle path may
+// delete them. Mirror of isPermanentBranch/mergePrArgs in the goal
+// template's github.mts (this overlay cannot import across templates in the
+// source tree); keep the two in step.
+export const isPermanentBranch = (branch: string): boolean =>
+  branch.startsWith("release/");
+
+/** `gh` argument string that squash-merges `target` (PR number or URL),
+ * deleting the head branch unless it is permanent. */
+export const mergePrCommand = (target: string, headRefName: string): string =>
+  `pr merge ${target} --squash${isPermanentBranch(headRefName) ? "" : " --delete-branch"}`;
+
 /** Bodies go through --body-file: safe for newlines, backticks, quotes. */
 const bodyFile = (body: string): string => {
   const path = join(mkdtempSync(join(tmpdir(), "sandcastle-gh-")), "body.md");

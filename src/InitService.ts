@@ -6,6 +6,7 @@ import {
   scaffoldIssueAnchoredPrdWorkflow,
   scaffoldPrdWorkflow,
 } from "./PrdWorkflow.js";
+import { scaffoldReleaseWorkflow } from "./ReleaseWorkflow.js";
 import { SANDBOX_REPO_DIR } from "./SandboxFactory.js";
 
 const GITIGNORE = `.env
@@ -1248,6 +1249,10 @@ export const scaffold = (
       createLabel
     ) {
       yield* scaffoldIssueAnchoredPrdWorkflow(repoDir);
+      // Release workflow (prd/009): /new-release files `sandcastle:release`
+      // issues, /cut-release executes them in the owner's session. Same
+      // GitHub-only, label-gated conditions; never overwrites.
+      yield* scaffoldReleaseWorkflow(repoDir);
     }
 
     // The customize skill must exist the moment init finishes: deferring
