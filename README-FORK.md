@@ -6,6 +6,20 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Parallel-lane cap (`feat/parallel-lane-cap`)
+
+The planner returns every unblocked issue and the goal template dispatched
+all of them at once. On a 2-core VPS each extra lane — an agent process, a
+container, typecheck/test bursts — starved the others.
+
+**What was added**
+
+- `MAX_PARALLEL_LANES` in `.sandcastle/config.mts` (default 2). The main
+  loop dispatches at most that many implementer lanes per cycle and logs
+  which issues it deferred. Deferred issues keep their label and have no
+  PR, so the next iteration's classify→plan pass re-surfaces them —
+  deferral, not loss.
+
 ## Multi-machine-safe pushes (`feat/multi-machine-push`)
 
 Running the same repo's lanes from two machines (laptop + VPS) broke two
