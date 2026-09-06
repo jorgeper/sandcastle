@@ -140,7 +140,9 @@ describe("conversational-prd template", () => {
     // the decompose handoff issue at merge.
     expect(design).toContain("PR feedback");
     expect(design).toContain("sandcastle:approved");
-    expect(design).toContain("pr merge");
+    // The merge command is built by shared.ts (prd/009 R14: release/*
+    // heads survive their merge); design.ts calls it.
+    expect(design).toContain("mergePrCommand(");
     expect(design).toContain("decomposeIssueTitle");
     // decompose.ts closes its tracking issue; issue.ts routes by label.
     expect(decompose).toContain("issue close");
