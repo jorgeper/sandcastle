@@ -36,6 +36,15 @@ def test_parse_merges_keeps_only_issue_merges() -> None:
     assert [m.issues for m in merges] == [(31, 32), (30,)]
 
 
+def test_parse_merges_reads_branch_style_subjects() -> None:
+    text = (
+        "2026-09-06T11:00:00+00:00|RALPH: merge sandcastle/issue-261 and sandcastle/issue-255\n"
+        "2026-09-06T10:00:00+00:00|Merge branch 'sandcastle/issue-253'\n"
+        "2026-09-06T09:00:00+00:00|RALPH: issue #250 — the Names section (spec issue-specs/issue-250.md)\n"
+    )
+    assert [m.issues for m in parse_merges(text)] == [(261, 255), (253,)]
+
+
 def test_parse_branches_reads_name_and_count() -> None:
     assert parse_branches("sandcastle/issue-31 3\nsandcastle/issue-32 0\n") == {
         "sandcastle/issue-31": 3,

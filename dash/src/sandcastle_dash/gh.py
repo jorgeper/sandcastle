@@ -134,11 +134,17 @@ def parse_merges(text: str) -> list[Merge]:
         if bar < 0:
             continue
         ts, subject = line[:bar], line[bar + 1 :]
-        if not re.search(r"\bmerge issues? #", subject, re.I):
+        # "merge issue #31", "merge issues #31 #32", "merge sandcastle/issue-31 and
+        # sandcastle/issue-32", "Merge branch 'sandcastle/issue-31'" — all count.
+        if not re.search(r"\bmerge\b", subject, re.I):
             continue
-        issues = tuple(int(m.group(1)) for m in re.finditer(r"#(\d+)", subject))
-        if issues:
-            merges.append(Merge(_iso(ts), issues, subject))
+        seen: list[int] = []
+        for m in re.finditer(r"(?:#|issue-)(\d+)", subject):
+            n = int(m.group(1))
+            if n not in seen:
+                seen.append(n)
+        if seen:
+            merges.append(Merge(_iso(ts), tuple(seen), subject))
     return merges
 
 
