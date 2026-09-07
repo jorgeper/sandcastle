@@ -281,7 +281,7 @@ class DashApp(App):
         now = _now()
         runs = load_runs(logs_dir(self.repo), now) if self.repo else []
         self._runs = runs
-        state = derive_state(find_loop_process(now), runs)
+        state = derive_state(find_loop_process(now, self.repo), runs)
         phases: dict[str, PhaseStat] = {}
         if self.repo:
             timings = read_timings(logs_dir(self.repo) / "timings.jsonl")
@@ -333,7 +333,7 @@ def run_once(repo: Path | None) -> None:
     except Exception as exc:
         limits_error = f"unavailable: {describe_error(exc)}"
     runs = load_runs(logs_dir(repo), now) if repo else []
-    state = derive_state(find_loop_process(now), runs)
+    state = derive_state(find_loop_process(now, repo), runs)
     cfg = load_config(repo) if repo else NO_CONFIG
     gh_state = GhState()
     rows = load_queue_rows(repo, runs, cfg, gh_state, now)

@@ -45,6 +45,7 @@ export const printHelp = (): void => {
       `  npm run sandcastle:doctor    check env, auth, docker image, and labels`,
       `      -- --image-gaps          also live-scan logs for in-sandbox installs + Dockerfile suggestions`,
       `  npx tsx .sandcastle/main.mts [--init | --doctor [--image-gaps] | --help]`,
+      `  sandcastle-dash              terminal dashboard over .sandcastle/logs (uv tool install --editable <fork>/dash)`,
       ``,
       `Labels (see .sandcastle/PR_SETUP.md for the full protocol):`,
       ...LABEL_ROWS.map(

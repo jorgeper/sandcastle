@@ -171,6 +171,23 @@ not three agent-turns deep in an unsatisfiable spec goal. Independently,
 `npm run sandcastle` warns at startup (never blocks) if the loop's current
 branch doesn't match the repo's GitHub default branch.
 
+**9. Install the dashboard (optional, once per machine).** `sandcastle-dash`
+is a terminal dashboard for the whole pipeline: rate limits, the running
+loop and its agents, recent runs, the issue queue, resolved issues, stats.
+It needs Python ≥ 3.12 and [uv](https://docs.astral.sh/uv/), and is
+installed from the fork checkout, not per repo:
+
+```bash
+uv tool install --editable ~/src/sandcastle/dash
+cd <repo> && sandcastle-dash          # or: sandcastle-dash --repo <path>, --once
+```
+
+It finds the repo by walking up to a `.sandcastle/logs` directory, so it
+works in any onboarded repo. Only the goal template writes
+`timings.jsonl`; on other templates the phase bars and 7-day stats are
+empty while the live, recent and queue sections still work. Full section
+list, keys and data sources: `dash/README.md`.
+
 The filer lane is the gentlest first run: capture is instant, `y` opens
 the chat, route to `Sandcastle`, then `npm run sandcastle` to watch the
 implement lane land it. From here the lanes below are the map.
@@ -355,21 +372,21 @@ implementers run in goal mode, reviewer/merger land the work.
 
 ## Every touchpoint, one table
 
-| You want to…                   | Do this                                                                                                          |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| File anything, well-formed     | `npm run sandcastle:issue -- "<report>"` — filer routes it (implement / design / hold)                           |
-| Queue work by hand             | Create an issue; add `sandcastle:design`, `sandcastle:decompose`, or `Sandcastle`                                |
-| Start/resume a design          | `npm run sandcastle:design` (topic, `--issue <n>`, or picker — free text files a new topic)                      |
-| Answer an agent                | Chat CLI: arrows + enter, or type; **Approve** sends `APPROVED`                                                  |
-| Step away mid-conversation     | Ctrl-C — always safe; re-run the script to re-attach                                                             |
-| Revise a PRD under review      | Comment on the PRD PR (inline works too); next design run relays it                                              |
-| Approve any gated PR           | Add `sandcastle:approved` (script/orchestrator merges — you never merge)                                         |
-| Turn a merged PRD into issues  | `npm run sandcastle:decompose`; approve the tree in chat                                                         |
-| Build the backlog              | `npm run sandcastle`                                                                                             |
-| Gate an impl issue behind a PR | Label it `sandcastle:require-pr`                                                                                 |
-| Get the PR without the wait    | Label it `sandcastle:agent-approve` — the reviewer approves in your place                                        |
-| Cut a release                  | `/new-release` (files the issue), then `/cut-release <n>`; you publish the verified draft                        |
-| See what agents are doing      | `tail -f .sandcastle/logs/conversation-<id>.log`; transcripts in `.sandcastle/conversations/<id>/messages.jsonl` |
+| You want to…                   | Do this                                                                                                                                                                                                    |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File anything, well-formed     | `npm run sandcastle:issue -- "<report>"` — filer routes it (implement / design / hold)                                                                                                                     |
+| Queue work by hand             | Create an issue; add `sandcastle:design`, `sandcastle:decompose`, or `Sandcastle`                                                                                                                          |
+| Start/resume a design          | `npm run sandcastle:design` (topic, `--issue <n>`, or picker — free text files a new topic)                                                                                                                |
+| Answer an agent                | Chat CLI: arrows + enter, or type; **Approve** sends `APPROVED`                                                                                                                                            |
+| Step away mid-conversation     | Ctrl-C — always safe; re-run the script to re-attach                                                                                                                                                       |
+| Revise a PRD under review      | Comment on the PRD PR (inline works too); next design run relays it                                                                                                                                        |
+| Approve any gated PR           | Add `sandcastle:approved` (script/orchestrator merges — you never merge)                                                                                                                                   |
+| Turn a merged PRD into issues  | `npm run sandcastle:decompose`; approve the tree in chat                                                                                                                                                   |
+| Build the backlog              | `npm run sandcastle`                                                                                                                                                                                       |
+| Gate an impl issue behind a PR | Label it `sandcastle:require-pr`                                                                                                                                                                           |
+| Get the PR without the wait    | Label it `sandcastle:agent-approve` — the reviewer approves in your place                                                                                                                                  |
+| Cut a release                  | `/new-release` (files the issue), then `/cut-release <n>`; you publish the verified draft                                                                                                                  |
+| See what agents are doing      | `sandcastle-dash` (step 9): live agents, recent runs, queue, resolved, rate limits — or `tail -f .sandcastle/logs/<file>.log`; conversation transcripts in `.sandcastle/conversations/<id>/messages.jsonl` |
 
 **Who wrote that?** Everything an agent writes on GitHub under your
 identity starts with a marker — `**[filer · claude-code · <model>]**`,
@@ -395,6 +412,13 @@ your PR comments from agent replies.)
   conversation keeps its transcript/worktree but loses the agent's memory.
 - Conversations require `claudeCode` (session resume + structured output);
   other providers throw `ConversationNotSupportedError`.
+- **The dashboard reads, never writes:** `sandcastle-dash` parses
+  `.sandcastle/logs/*.log` (one block per `--- Run started ---`; the file
+  name gives role and issue), `timings.jsonl` (the goal template's per-phase
+  outcome and duration), `ps` for the loop process, and `gh`/`git` for
+  issues, PRs and merges. A run whose file went quiet for three minutes
+  with no outcome shows as _interrupted_, which is the fastest way to spot
+  a killed agent.
 
 ## Cheat sheet
 
@@ -404,7 +428,7 @@ npm run sandcastle:design -- "idea"         # design lane (files the issue)
 npm run sandcastle:design                   # picker / re-attach (free text = new topic)
 npm run sandcastle:decompose                # decompose lane (picker)
 npm run sandcastle                          # implement lane (main loop)
-sandcastle-dash                             # terminal dashboard: running, recent, queued (dash/README.md)
+sandcastle-dash                             # terminal dashboard: limits, running, recent, queue, resolved, stats (dash/README.md)
 gh pr edit <pr> --add-label "sandcastle:approved"        # approve any gated PR
 /new-release                                # Claude Code: interview → changelog → sandcastle:release issue
 /cut-release <n>                            # Claude Code: cut to a verified draft; you publish

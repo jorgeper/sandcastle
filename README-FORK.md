@@ -15,6 +15,14 @@ with outcomes and errors, the issue queue with effort tiers and a stage per
 issue, and 7-day stats. Read-only, local files plus `gh`/`git`; the
 TypeScript library is untouched. See `dash/README.md`.
 
+Generic by construction: it locates the repo by walking up to
+`.sandcastle/logs`, reads the library's `<branch>-<role>.log` files and the
+goal template's `timings.jsonl`, and uses the `sandcastle*` label
+vocabulary and `sandcastle/issue-<n>` branches every onboarded repo shares.
+Installed once per machine from the fork (`uv tool install --editable
+./dash`); FORK-MANUAL onboarding step 9 and the template's `--help` point
+at it.
+
 0.3.0 adds a **Rate limits** first section ported from claude-usage-tui
 (Session/Week meters from the OAuth usage endpoint with reset countdowns,
 an exhaustion warning, and the last hour's burn from local transcripts;

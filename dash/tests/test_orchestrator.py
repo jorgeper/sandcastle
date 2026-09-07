@@ -1,7 +1,15 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sandcastle_dash.logs import Run
-from sandcastle_dash.orchestrator import LoopProcess, derive_state, parse_ps
+from pathlib import Path
+
+from sandcastle_dash.orchestrator import (
+    LoopProcess,
+    derive_state,
+    parse_lsof_cwd,
+    parse_ps,
+    select_for_repo,
+)
 
 UTC = timezone.utc
 PS = """\
@@ -57,3 +65,25 @@ def test_derive_state_idle_reports_the_latest_run() -> None:
 
 def test_derive_state_iteration_is_one_before_the_first_planner() -> None:
     assert derive_state(LoopProcess(1, datetime.now(UTC)), []).iteration == 1
+
+
+def test_parse_lsof_cwd_reads_the_n_line() -> None:
+    assert parse_lsof_cwd("p37656\nfcwd\nn/Users/x/src/marky-mark\n") == Path("/Users/x/src/marky-mark")
+    assert parse_lsof_cwd("") is None
+
+
+def test_select_for_repo_keeps_only_loops_in_that_repo(tmp_path: Path) -> None:
+    now = datetime.now(UTC)
+    repo = tmp_path / "a"
+    other = tmp_path / "b"
+    (repo / ".sandcastle" / "worktrees" / "w").mkdir(parents=True)
+    other.mkdir()
+    early = LoopProcess(1, now - timedelta(hours=2))
+    mine = LoopProcess(2, now - timedelta(hours=1))
+    unknown = LoopProcess(3, now - timedelta(minutes=5))
+    in_worktree = LoopProcess(4, now - timedelta(minutes=30))
+    candidates = [(early, other), (mine, repo), (unknown, None), (in_worktree, repo / ".sandcastle" / "worktrees" / "w")]
+    assert select_for_repo(candidates, repo) == mine  # earliest of mine/in_worktree/unknown
+    assert select_for_repo([(early, other)], repo) is None
+    assert select_for_repo([(early, other)], None) == early
+    assert select_for_repo([(unknown, None)], repo) == unknown  # unreadable cwd: keep
