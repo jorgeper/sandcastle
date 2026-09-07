@@ -40,6 +40,8 @@
 //   npx tsx .sandcastle/main.mts --init       create the label vocabulary
 //   npx tsx .sandcastle/main.mts --doctor     check env/auth/docker/labels
 //   npx tsx .sandcastle/main.mts --help       show usage
+//   sandcastle-dash                           terminal dashboard over .sandcastle/logs
+//                                             (uv tool install --editable <fork>/dash)
 
 import { existsSync, readFileSync } from "node:fs";
 import { execFile } from "node:child_process";

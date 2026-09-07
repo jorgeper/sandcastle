@@ -6,6 +6,42 @@ file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
 that implemented it, so any change can be proposed upstream from its branch.
 
+## Terminal dashboard: `sandcastle-dash` (`feat/dash`)
+
+Implements prd/010. A Python/Textual TUI under `dash/`, installed with
+`uv tool install --editable ./dash`, that watches a goal-template checkout
+from the terminal: the running loop and its agents, the last 24 h of runs
+with outcomes and errors, the issue queue with effort tiers and a stage per
+issue, and 7-day stats. Read-only, local files plus `gh`/`git`; the
+TypeScript library is untouched. See `dash/README.md`.
+
+Generic by construction: it locates the repo by walking up to
+`.sandcastle/logs`, reads the library's `<branch>-<role>.log` files and the
+goal template's `timings.jsonl`, and uses the `sandcastle*` label
+vocabulary and `sandcastle/issue-<n>` branches every onboarded repo shares.
+Installed once per machine from the fork (`uv tool install --editable
+./dash`); FORK-MANUAL onboarding step 9 and the template's `--help` point
+at it.
+
+0.3.0 adds a **Rate limits** first section ported from claude-usage-tui
+(Session/Week meters from the OAuth usage endpoint with reset countdowns,
+an exhaustion warning, and the last hour's burn from local transcripts;
+30-minute poll with backoff), and category colors in the Now section: the
+sparkline, the recent log lines and a "doing <category> <age>" label share
+the Stats bar's palette, with a legend.
+
+0.2.0 adds: issue and PR numbers are clickable (a Textual click action plus
+an OSC 8 hyperlink, so both a plain click and Cmd+click work); a **Resolved
+(last 10)** section listing the newest closed issues with the merge that
+landed them; Recent runs capped at the newest 15; per running agent the Now
+section shows a heartbeat that fades with silence, elapsed time as a bar
+against the phase median, a five-minute log-activity sparkline and the last
+three log lines instead of a `tail -f` path (`o` opens the newest run's
+issue from the keyboard). The
+merge parser now requires the subject to start with "merge" (after an
+optional `RALPH:`-style prefix) so implementation commits that mention a
+merge mid-sentence no longer count as merges.
+
 ## Release lane: issue-driven releases, cut in your session (`feat/release-lane`)
 
 Implements prd/009 (decision record: ADR 0024). Ported from a dogfooding
