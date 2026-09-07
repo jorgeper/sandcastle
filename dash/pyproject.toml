@@ -1,6 +1,6 @@
 [project]
 name = "sandcastle-dash"
-version = "0.1.0"
+version = "0.2.0"
 description = "Terminal dashboard for the Sandcastle goal-template loop: live agents, recent runs, issue queue, stats"
 requires-python = ">=3.12"
 dependencies = ["textual>=1.0"]

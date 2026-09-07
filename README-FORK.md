@@ -15,6 +15,15 @@ with outcomes and errors, the issue queue with effort tiers and a stage per
 issue, and 7-day stats. Read-only, local files plus `gh`/`git`; the
 TypeScript library is untouched. See `dash/README.md`.
 
+0.2.0 adds: issue and PR numbers are clickable (a Textual click action plus
+an OSC 8 hyperlink, so both a plain click and Cmd+click work); a **Resolved
+(last 10)** section listing the newest closed issues with the merge that
+landed them; Recent runs capped at the newest 15; the Now section animates
+while agents run (`o` opens the newest run's issue from the keyboard). The
+merge parser now requires the subject to start with "merge" (after an
+optional `RALPH:`-style prefix) so implementation commits that mention a
+merge mid-sentence no longer count as merges.
+
 ## Release lane: issue-driven releases, cut in your session (`feat/release-lane`)
 
 Implements prd/009 (decision record: ADR 0024). Ported from a dogfooding

@@ -39,6 +39,7 @@ class Issue:
     labels: tuple[str, ...]
     parent: int | None
     sub_issues: tuple[int, ...]
+    closed: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,7 @@ def parse_issues(text: str) -> list[Issue]:
             labels=tuple(l["name"] for l in n.get("labels", {}).get("nodes", [])),
             parent=int(n["parent"]["number"]) if n.get("parent") else None,
             sub_issues=tuple(int(s["number"]) for s in n.get("subIssues", {}).get("nodes", [])),
+            closed=_iso(n["closedAt"]) if n.get("closedAt") else None,
         )
         for n in nodes
     ]
@@ -127,6 +129,9 @@ def parse_prs(text: str) -> list[Pr]:
     return prs
 
 
+_MERGE_SUBJECT = re.compile(r"^\s*(?:[\w-]+:\s*)?merge\b", re.I)
+
+
 def parse_merges(text: str) -> list[Merge]:
     merges: list[Merge] = []
     for line in text.splitlines():
@@ -135,8 +140,10 @@ def parse_merges(text: str) -> list[Merge]:
             continue
         ts, subject = line[:bar], line[bar + 1 :]
         # "merge issue #31", "merge issues #31 #32", "merge sandcastle/issue-31 and
-        # sandcastle/issue-32", "Merge branch 'sandcastle/issue-31'" — all count.
-        if not re.search(r"\bmerge\b", subject, re.I):
+        # sandcastle/issue-32", "Merge branch 'sandcastle/issue-31'" — all count,
+        # with or without an agent prefix ("RALPH: "). A subject that merely
+        # mentions a merge mid-sentence ("... after the parallel merge") does not.
+        if not _MERGE_SUBJECT.match(subject):
             continue
         seen: list[int] = []
         for m in re.finditer(r"(?:#|issue-)(\d+)", subject):
@@ -146,6 +153,15 @@ def parse_merges(text: str) -> list[Merge]:
         if seen:
             merges.append(Merge(_iso(ts), tuple(seen), subject))
     return merges
+
+
+_REMOTE = re.compile(r"^(?:https?://|git@|ssh://git@)([^/:]+)[/:](.+?)(?:\.git)?/?$")
+
+
+def parse_remote_url(text: str) -> str | None:
+    """Browser URL of a git remote: ssh and https forms both map to https."""
+    m = _REMOTE.match(text.strip())
+    return f"https://{m.group(1)}/{m.group(2)}" if m else None
 
 
 def parse_branches(text: str) -> dict[str, int]:
@@ -190,6 +206,13 @@ def default_branch(repo: Path) -> str:
         return ref.split("/", 1)[1] if "/" in ref else ref
     except SourceError:
         return "main"
+
+
+def remote_url(repo: Path) -> str | None:
+    try:
+        return parse_remote_url(_run(["git", "remote", "get-url", "origin"], repo, timeout=5))
+    except SourceError:
+        return None
 
 
 def fetch_merges(repo: Path, base: str) -> list[Merge]:

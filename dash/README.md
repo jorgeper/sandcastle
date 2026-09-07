@@ -21,14 +21,33 @@ how did it go, and what is queued and why is it waiting._
 
 ## Sections
 
-| Key | Section               | Shows                                                                                                                                        | Refresh |
-| --- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `1` | **Now**               | Whether the loop is running (iteration, since when) and every agent in flight: role, issue, elapsed, attempt, context window, last log line. | 5 s     |
-| `2` | **Recent runs (24h)** | Every agent run of the last day: outcome, role, issue, start, duration, and the error line for failures.                                     | 5 s     |
-| `3` | **Issue queue**       | Open `sandcastle` issues with effort tier, flags, age and stage: held, working, ready to merge, PR status, implemented, spec'd, queued.      | 45 s    |
-| `4` | **Stats (7d)**        | Per-phase runs, success rate, median and max; where agent time went in the last 24 h; runs and merges per day. Collapsed by default.         | 120 s   |
+| Key | Section                | Shows                                                                                                                                                                           | Refresh |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `1` | **Now**                | Whether the loop is running (iteration, since when) and every agent in flight: role, issue, elapsed, attempt, context window, last log line.                                    | 5 s     |
+| `2` | **Recent runs (24h)**  | The newest 15 agent runs of the last day: outcome, role, issue, start, duration, and the error line for failures. The title counts the whole day.                               | 5 s     |
+| `3` | **Issue queue**        | Open `sandcastle` issues with effort tier, flags, age and stage: held, working, ready to merge, PR status, implemented, spec'd, queued.                                         | 45 s    |
+| `4` | **Resolved (last 10)** | The ten most recently closed `sandcastle` issues, newest first, with tier, how long ago they closed, and the merge commit that landed them (and which issues merged alongside). | 45 s    |
+| `5` | **Stats (7d)**         | Per-phase runs, success rate, median and max; where agent time went in the last 24 h; runs and merges per day. Collapsed by default.                                            | 120 s   |
 
-Other keys: **Esc**/`q` quit · `r` refresh everything now.
+Other keys: **Esc**/`q` quit · `r` refresh everything now · `o` open the
+newest run's issue in the browser.
+
+While an agent is in flight the **Now** section animates: a braille spinner
+per agent, a pulsing status dot, and a sliding wave under each `tail -f` line.
+It redraws from cached data eight times a second and reads nothing from disk.
+
+### Clickable issues and PRs
+
+Every `#123` in the tables is a link, two ways at once:
+
+- **Click it.** Textual handles the mouse itself, so a plain click opens the
+  issue (or PR) in your browser in any terminal with mouse support.
+- **Cmd/Ctrl+click it.** The same text carries an OSC 8 hyperlink, which
+  iTerm2, Kitty, WezTerm and Ghostty underline on hover and open natively.
+
+The repository URL comes from `git remote get-url origin`; with no remote the
+numbers render as plain text. `--once` output is plain text and cannot carry
+links, so it prints the URL pattern once at the end instead.
 
 ## Install
 

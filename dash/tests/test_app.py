@@ -26,15 +26,27 @@ def test_app_boots_renders_and_toggles(tmp_path: Path) -> None:
             await pilot.pause()
             titles = {
                 cid: app.query_one(f"#sec-{cid}", Collapsible).title
-                for cid in ("now", "runs", "queue", "stats")
+                for cid in ("now", "runs", "queue", "resolved", "stats")
             }
             assert all("updated" in title for title in titles.values()), titles
             assert "runs" in titles["runs"]
             assert "gh:" in titles["queue"]  # no gh here → the error is named, not fatal
             stats = app.query_one("#sec-stats", Collapsible)
             assert stats.collapsed
-            await pilot.press("4")
+            await pilot.press("5")
             assert not stats.collapsed
+            assert "resolved" in titles["resolved"]
+            # the fixture log is running → the tick advances the animation frame
+            await pilot.pause(0.5)
+            assert app._frame > 0
+            opened: list[str] = []
+            app.open_url = lambda url, **kw: opened.append(url)  # type: ignore[method-assign]
+            app.base_url = "https://github.com/x/y"
+            await pilot.press("o")
+            assert opened == ["https://github.com/x/y/issues/31"]
+            # a click on a linked "#31" dispatches this action through the app namespace
+            await app.run_action("app.open('https://github.com/x/y/issues/31')")
+            assert opened[-1] == "https://github.com/x/y/issues/31"
             await pilot.press("r")
             await app.workers.wait_for_complete()
             await pilot.press("q")

@@ -20,9 +20,12 @@ from sandcastle_dash import gh
 from sandcastle_dash.config import TemplateConfig, load_config
 from sandcastle_dash.logs import Run, load_runs, read_timings
 from sandcastle_dash.orchestrator import derive_state, find_loop_process
-from sandcastle_dash.panels import now_table, queue_table, runs_table, stats_view
+from sandcastle_dash.links import issue_url
+from sandcastle_dash.orchestrator import LoopState
+from sandcastle_dash.panels import now_table, queue_table, resolved_table, runs_table, stats_view
 from sandcastle_dash.queue import Row, branch_name, build_queue
 from sandcastle_dash.repo import find_repo, logs_dir
+from sandcastle_dash.resolved import Resolved, build_resolved
 from sandcastle_dash.snapshot import snapshot_text
 from sandcastle_dash.stats import category_totals, per_day, phase_stats
 
@@ -30,8 +33,10 @@ SECTIONS = [
     ("now", "Now", 5),
     ("runs", "Recent runs (24h)", 5),
     ("queue", "Issue queue", 45),
+    ("resolved", "Resolved (last 10)", 45),
     ("stats", "Stats (7d)", 120),
 ]
+TICK_SECONDS = 0.125  # Now-section animation cadence while agents run
 
 NO_CONFIG = TemplateConfig(None, None, None)
 
@@ -71,6 +76,17 @@ def load_queue_rows(
     )
 
 
+def load_resolved_rows(repo: Path | None, cfg: TemplateConfig, state: GhState) -> list[Resolved]:
+    """Closed issues joined to merges; reuses the issues load_queue_rows fetched."""
+    if repo is None:
+        return []
+    try:
+        state.merges = gh.fetch_merges(repo, gh.default_branch(repo))
+    except gh.SourceError:
+        pass  # keep the last merges; the queue title already names gh errors
+    return build_resolved(state.issues, state.merges, cfg)
+
+
 class Panel(Static):
     def show(self, renderable: RenderableType) -> None:
         self.update(renderable)
@@ -82,6 +98,7 @@ class DashApp(App):
         ("escape", "quit", "Quit"),
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
+        ("o", "open_latest", "Open issue"),
     ] + [
         (str(i + 1), f"toggle('{cid}')", title.split(" (")[0])
         for i, (cid, title, _) in enumerate(SECTIONS)
@@ -100,6 +117,9 @@ class DashApp(App):
         self._cfg = load_config(repo) if repo else NO_CONFIG
         self._gh = GhState()
         self._runs: list[Run] = []
+        self.base_url = gh.remote_url(repo) if repo else None
+        self._live: tuple[LoopState, list[Run], datetime] | None = None
+        self._frame = 0
 
     def compose(self) -> ComposeResult:
         with VerticalScroll():
@@ -121,11 +141,25 @@ class DashApp(App):
                 self.set_interval(seconds, self.refresh_queue)
             elif cid == "stats":
                 self.set_interval(seconds, self.refresh_stats)
+        self.set_interval(TICK_SECONDS, self._tick)
 
     # ---- bindings -------------------------------------------------------
     def action_toggle(self, cid: str) -> None:
         section = self.query_one(f"#sec-{cid}", Collapsible)
         section.collapsed = not section.collapsed
+
+    def action_open(self, url: str) -> None:
+        """Target of the @click links in every table."""
+        self.open_url(url)
+
+    def action_open_latest(self) -> None:
+        """Keyboard fallback: open the issue of the newest run."""
+        latest = next((r for r in self._runs if r.issue), None)
+        url = issue_url(self.base_url, latest.issue) if latest else None
+        if url:
+            self.open_url(url)
+        else:
+            self.notify("no issue to open", severity="warning", timeout=3)
 
     def action_refresh(self) -> None:
         if self.repo:
@@ -157,22 +191,38 @@ class DashApp(App):
         self.query_one(f"#panel-{cid}", Panel).show(renderable)
         self._stamp(cid, summary, error)
 
+    def _tick(self) -> None:
+        """Redraw the Now section from cached data with the next animation
+        frame. Pure and cheap; only runs while an agent is in flight."""
+        if not self._live:
+            return
+        state, runs, now = self._live
+        if not any(r.status == "running" for r in runs):
+            return
+        self._frame += 1
+        table, _ = now_table(state, runs, _now(), self.base_url, self._frame)
+        self.query_one("#panel-now", Panel).show(table)
+
     def _load_live(self) -> None:
         now = _now()
         runs = load_runs(logs_dir(self.repo), now) if self.repo else []
         self._runs = runs
         state = derive_state(find_loop_process(now), runs)
+        self._live = (state, runs, now)
         error = None if self.repo else "no .sandcastle/logs under the current directory"
-        table, summary = now_table(state, runs, now)
+        table, summary = now_table(state, runs, now, self.base_url, self._frame)
         self.call_from_thread(self._show, "now", table, summary, error)
-        table, summary = runs_table(runs, now)
+        table, summary = runs_table(runs, now, base_url=self.base_url)
         self.call_from_thread(self._show, "runs", table, summary)
 
     def _load_queue(self) -> None:
         now = _now()
         rows = load_queue_rows(self.repo, self._runs, self._cfg, self._gh, now)
-        table, summary = queue_table(rows)
+        table, summary = queue_table(rows, self.base_url)
         self.call_from_thread(self._show, "queue", table, summary, self._gh.error)
+        done = load_resolved_rows(self.repo, self._cfg, self._gh)
+        table, summary = resolved_table(done, now, self.base_url)
+        self.call_from_thread(self._show, "resolved", table, summary, self._gh.error)
 
     def _load_stats(self) -> None:
         now = _now()
@@ -199,16 +249,20 @@ def run_once(repo: Path | None) -> None:
     runs = load_runs(logs_dir(repo), now) if repo else []
     state = derive_state(find_loop_process(now), runs)
     cfg = load_config(repo) if repo else NO_CONFIG
-    rows = load_queue_rows(repo, runs, cfg, GhState(), now)
-    print(snapshot_text(state, runs, rows, now, repo), end="")
+    gh_state = GhState()
+    rows = load_queue_rows(repo, runs, cfg, gh_state, now)
+    done = load_resolved_rows(repo, cfg, gh_state)
+    base_url = gh.remote_url(repo) if repo else None
+    print(snapshot_text(state, runs, rows, done, now, repo, base_url), end="")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="sandcastle-dash",
         description="Terminal dashboard for the Sandcastle goal-template loop: live agents, "
-        "recent runs, issue queue, 7-day stats. Reads .sandcastle/logs plus gh/git from the "
-        "local checkout. Esc/q quits, r refreshes, 1-4 toggle sections.",
+        "recent runs, issue queue, resolved issues, 7-day stats. Reads .sandcastle/logs plus "
+        "gh/git from the local checkout. Esc/q quits, r refreshes, o opens the newest run's "
+        "issue, 1-5 toggle sections. Issue and PR numbers are clickable.",
     )
     parser.add_argument(
         "--repo", type=Path, help="repository checkout to watch (default: walk up from the cwd)"
