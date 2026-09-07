@@ -36,9 +36,9 @@ def test_app_boots_renders_and_toggles(tmp_path: Path) -> None:
             await pilot.press("5")
             assert not stats.collapsed
             assert "resolved" in titles["resolved"]
-            # the fixture log is running → the tick advances the animation frame
-            await pilot.pause(0.5)
-            assert app._frame > 0
+            # the fixture log is running → the live cache holds phase stats for the bar
+            assert app._live is not None and "implementer" in app._live[2]
+            await pilot.pause(0.6)  # a tick redraws without error
             opened: list[str] = []
             app.open_url = lambda url, **kw: opened.append(url)  # type: ignore[method-assign]
             app.base_url = "https://github.com/x/y"

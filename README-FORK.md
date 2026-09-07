@@ -18,8 +18,11 @@ TypeScript library is untouched. See `dash/README.md`.
 0.2.0 adds: issue and PR numbers are clickable (a Textual click action plus
 an OSC 8 hyperlink, so both a plain click and Cmd+click work); a **Resolved
 (last 10)** section listing the newest closed issues with the merge that
-landed them; Recent runs capped at the newest 15; the Now section animates
-while agents run (`o` opens the newest run's issue from the keyboard). The
+landed them; Recent runs capped at the newest 15; per running agent the Now
+section shows a heartbeat that fades with silence, elapsed time as a bar
+against the phase median, a five-minute log-activity sparkline and the last
+three log lines instead of a `tail -f` path (`o` opens the newest run's
+issue from the keyboard). The
 merge parser now requires the subject to start with "merge" (after an
 optional `RALPH:`-style prefix) so implementation commits that mention a
 merge mid-sentence no longer count as merges.

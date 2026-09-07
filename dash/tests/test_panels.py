@@ -40,8 +40,6 @@ def test_now_table_lists_running_agents(tmp_path: Path) -> None:
     text = _render(renderable)
     assert summary == "running · 1 agent"
     assert "implementer" in text and "#31" in text and "Iteration 2/4" in text
-    # the tail -f path is allowed to wrap: it must stay copyable, not truncated
-    assert "sandcastle-issue-31-implementer.log" in text.replace("\n", "")
 
 
 def test_now_table_idle(tmp_path: Path) -> None:
@@ -148,16 +146,19 @@ def test_resolved_table_lists_closed_issues() -> None:
     assert summary == "0 resolved" and "nothing" in _render(empty)
 
 
-def test_now_table_animates_running_agents(tmp_path: Path) -> None:
+def test_now_table_shows_heartbeat_bar_and_sparkline(tmp_path: Path) -> None:
     runs = _runs(tmp_path)
     now = datetime.now(UTC)
     state = derive_state(LoopProcess(1, now - timedelta(hours=3)), runs)
-    a = _render(now_table(state, runs, now, frame=0)[0])
-    b = _render(now_table(state, runs, now, frame=1)[0])
-    assert a != b
-    assert "▁" in a or "█" in a  # the wave under the active row
-    # idle: no spinner, frame changes nothing
-    idle = derive_state(None, runs)
-    assert _render(now_table(idle, [r for r in runs if r.status != "running"], now, frame=0)[0]) == _render(
-        now_table(idle, [r for r in runs if r.status != "running"], now, frame=3)[0]
-    )
+    stat = PhaseStat("implementer", 5, 5, 60_000, 120_000)
+    text = _render(now_table(state, runs, now, phases={"implementer": stat})[0])
+    assert "vs median" in text and "█" in text  # the run started long ago → bar full
+    assert "log lines, last 5m" in text
+    assert "Let me look at the failing test." in text  # the block's newest lines, not a path
+    assert "tail -f" not in text
+    # the heartbeat fades: fresh activity is a filled dot, silence a hollow one
+    def row(rendered: str) -> str:
+        return next(l for l in rendered.splitlines() if "implementer" in l and "#31" in l)
+
+    assert "●" in row(_render(now_table(state, runs, now)[0]))
+    assert "○" in row(_render(now_table(state, runs, now + timedelta(seconds=30))[0]))

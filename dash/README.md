@@ -32,9 +32,13 @@ how did it go, and what is queued and why is it waiting._
 Other keys: **Esc**/`q` quit · `r` refresh everything now · `o` open the
 newest run's issue in the browser.
 
-While an agent is in flight the **Now** section animates: a braille spinner
-per agent, a pulsing status dot, and a sliding wave under each `tail -f` line.
-It redraws from cached data eight times a second and reads nothing from disk.
+While an agent is in flight the **Now** section shows three signals, each
+derived from data rather than a clock: a heartbeat dot that lights when a log
+line lands and fades to hollow after ten seconds of silence; the elapsed time
+as a bar against that phase's 7-day median (yellow once past the median, red
+past the max); and, under the table, a five-minute sparkline of log lines per
+30 seconds followed by the agent's last three log lines. It redraws from
+cached data twice a second and reads nothing from disk between reloads.
 
 ### Clickable issues and PRs
 

@@ -27,7 +27,7 @@ from sandcastle_dash.queue import Row, branch_name, build_queue
 from sandcastle_dash.repo import find_repo, logs_dir
 from sandcastle_dash.resolved import Resolved, build_resolved
 from sandcastle_dash.snapshot import snapshot_text
-from sandcastle_dash.stats import category_totals, per_day, phase_stats
+from sandcastle_dash.stats import PhaseStat, category_totals, per_day, phase_stats
 
 SECTIONS = [
     ("now", "Now", 5),
@@ -36,7 +36,7 @@ SECTIONS = [
     ("resolved", "Resolved (last 10)", 45),
     ("stats", "Stats (7d)", 120),
 ]
-TICK_SECONDS = 0.125  # Now-section animation cadence while agents run
+TICK_SECONDS = 0.5  # heartbeat fade cadence while agents run
 
 NO_CONFIG = TemplateConfig(None, None, None)
 
@@ -118,8 +118,7 @@ class DashApp(App):
         self._gh = GhState()
         self._runs: list[Run] = []
         self.base_url = gh.remote_url(repo) if repo else None
-        self._live: tuple[LoopState, list[Run], datetime] | None = None
-        self._frame = 0
+        self._live: tuple[LoopState, list[Run], dict[str, PhaseStat]] | None = None
 
     def compose(self) -> ComposeResult:
         with VerticalScroll():
@@ -192,15 +191,15 @@ class DashApp(App):
         self._stamp(cid, summary, error)
 
     def _tick(self) -> None:
-        """Redraw the Now section from cached data with the next animation
-        frame. Pure and cheap; only runs while an agent is in flight."""
+        """Redraw the Now section from cached data at a fresh `now`, so the
+        heartbeats fade between log reloads. Pure and cheap; only runs while
+        an agent is in flight."""
         if not self._live:
             return
-        state, runs, now = self._live
+        state, runs, phases = self._live
         if not any(r.status == "running" for r in runs):
             return
-        self._frame += 1
-        table, _ = now_table(state, runs, _now(), self.base_url, self._frame)
+        table, _ = now_table(state, runs, _now(), self.base_url, phases)
         self.query_one("#panel-now", Panel).show(table)
 
     def _load_live(self) -> None:
@@ -208,9 +207,13 @@ class DashApp(App):
         runs = load_runs(logs_dir(self.repo), now) if self.repo else []
         self._runs = runs
         state = derive_state(find_loop_process(now), runs)
-        self._live = (state, runs, now)
+        phases: dict[str, PhaseStat] = {}
+        if self.repo:
+            timings = read_timings(logs_dir(self.repo) / "timings.jsonl")
+            phases = {p.phase: p for p in phase_stats(timings, now)}
+        self._live = (state, runs, phases)
         error = None if self.repo else "no .sandcastle/logs under the current directory"
-        table, summary = now_table(state, runs, now, self.base_url, self._frame)
+        table, summary = now_table(state, runs, now, self.base_url, phases)
         self.call_from_thread(self._show, "now", table, summary, error)
         table, summary = runs_table(runs, now, base_url=self.base_url)
         self.call_from_thread(self._show, "runs", table, summary)
@@ -253,7 +256,11 @@ def run_once(repo: Path | None) -> None:
     rows = load_queue_rows(repo, runs, cfg, gh_state, now)
     done = load_resolved_rows(repo, cfg, gh_state)
     base_url = gh.remote_url(repo) if repo else None
-    print(snapshot_text(state, runs, rows, done, now, repo, base_url), end="")
+    phases: dict[str, PhaseStat] = {}
+    if repo:
+        timings = read_timings(logs_dir(repo) / "timings.jsonl")
+        phases = {p.phase: p for p in phase_stats(timings, now)}
+    print(snapshot_text(state, runs, rows, done, now, repo, base_url, phases), end="")
 
 
 def main() -> None:

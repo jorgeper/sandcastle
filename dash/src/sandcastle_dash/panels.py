@@ -9,6 +9,14 @@ from rich.console import Group, RenderableType
 from rich.table import Table
 from rich.text import Text
 
+from sandcastle_dash.activity import (
+    activity_buckets,
+    duration_bar,
+    heartbeat,
+    line_stamps,
+    recent_lines,
+    sparkline,
+)
 from sandcastle_dash.breakdown import CATEGORIES
 from sandcastle_dash.format import (
     GRUVBOX,
@@ -27,12 +35,6 @@ from sandcastle_dash.resolved import Resolved
 from sandcastle_dash.stats import Day, PhaseStat
 
 RUNS_LIMIT = 15
-# Animation frames for the Now section (Req: active agents move). The app
-# advances `frame` on a fast timer while anything is running.
-SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-PULSE = "●◐◑◒◓"
-_WAVE_CELLS = "▁▂▃▄▅▆▇█▇▆▅▄▃▂"
-WAVE_WIDTH = 12
 
 _CAT_COLOR = {
     "verify": GRUVBOX["green"],
@@ -54,19 +56,6 @@ def _issue_label(run: Run, base_url: str | None = None, style: str = "") -> Text
     return issue_link(run.issue, base_url, style, fallback=run.scope)
 
 
-def spinner(frame: int) -> str:
-    return SPINNER[frame % len(SPINNER)]
-
-
-def wave(frame: int, width: int = WAVE_WIDTH) -> Text:
-    """A band of block glyphs that slides one cell per frame."""
-    cells = _WAVE_CELLS
-    text = Text()
-    for i in range(width):
-        text.append(cells[(i - frame) % len(cells)], style=GRUVBOX["aqua"])
-    return text
-
-
 def _age(delta: timedelta) -> str:
     """Compact age for the queue: '3h', '2d', '45m'."""
     secs = max(0, int(delta.total_seconds()))
@@ -82,13 +71,18 @@ def now_table(
     runs: list[Run],
     now: datetime,
     base_url: str | None = None,
-    frame: int = 0,
+    phases: dict[str, PhaseStat] | None = None,
 ) -> tuple[RenderableType, str]:
+    """Each running agent shows three data-driven signals: a heartbeat that
+    fades since its last log line, elapsed time as a bar against the phase's
+    median (yellow past it, red past the max), and under the table a
+    five-minute sparkline of log lines followed by its last few log lines.
+    `now` drives the fade; the app redraws on a short timer while agents
+    run."""
     running = [r for r in runs if r.status == "running"]
     head = Text()
     if state.running:
-        pulse = PULSE[frame % len(PULSE)] if running else PULSE[0]
-        head.append(f"{pulse} running", style=f"bold {GRUVBOX['green']}")
+        head.append("● running", style=f"bold {GRUVBOX['green']}")
         head.append(
             f" · iteration {state.iteration} · since {fmt_clock(state.started)}"
             f" ({fmt_ago(state.started, now)})",
@@ -107,33 +101,40 @@ def now_table(
         summary = "idle"
     parts: list[RenderableType] = [head]
     if running:
-        table = Table.grid(padding=(0, 2), expand=True)
+        table = Table.grid(padding=(0, 2))
         table.add_column(no_wrap=True)
         table.add_column(style="bold", no_wrap=True)
         table.add_column(no_wrap=True)
         table.add_column(justify="right", no_wrap=True)
         table.add_column(no_wrap=True)
+        table.add_column(no_wrap=True)
         table.add_column(justify="right", no_wrap=True)
-        table.add_column(style="dim", overflow="ellipsis", no_wrap=True, ratio=1)
-        table.add_row("", "agent", "issue", "elapsed", "attempt", "ctx", "last line")
-        for i, run in enumerate(running):
+        table.add_row("", "agent", "issue", "elapsed", "vs median", "attempt", "ctx")
+        for run in running:
             elapsed = (now - run.started).total_seconds() * 1000 if run.started else None
+            stat = phases.get(run.role) if phases else None
             table.add_row(
-                Text(spinner(frame + 3 * i), style=GRUVBOX["green"]),
+                heartbeat(run.last_activity, now),
                 Text(run.role, style=GRUVBOX["aqua"]),
                 _issue_label(run, base_url),
                 fmt_duration(elapsed),
+                duration_bar(elapsed, stat),
                 run.iteration or "—",
                 run.context_window or "—",
-                run.last_line,
             )
         parts.append(table)
-        for i, run in enumerate(running):
-            if run.path:
-                line = Text("  ")
-                line.append_text(wave(frame + 4 * i))
-                line.append(f"  tail -f {run.path}", style="dim")
-                parts.append(line)
+        for run in running:
+            parts.append(Text(""))
+            head_line = Text("  ")
+            head_line.append(run.role, style=GRUVBOX["aqua"])
+            head_line.append(" ")
+            head_line.append_text(_issue_label(run, base_url))
+            head_line.append("  ")
+            head_line.append_text(sparkline(activity_buckets(line_stamps(run), now)))
+            head_line.append("  log lines, last 5m", style="dim")
+            parts.append(head_line)
+            for line in recent_lines(run):
+                parts.append(Text(f"    {line}", style="dim", no_wrap=True, overflow="ellipsis"))
     elif state.running:
         parts.append(Text("  no agent in flight (between phases)", style="dim"))
     return Group(*parts), summary

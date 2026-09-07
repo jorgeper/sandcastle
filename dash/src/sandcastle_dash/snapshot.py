@@ -13,6 +13,7 @@ from sandcastle_dash.orchestrator import LoopState
 from sandcastle_dash.panels import now_table, queue_table, resolved_table, runs_table
 from sandcastle_dash.queue import Row
 from sandcastle_dash.resolved import Resolved
+from sandcastle_dash.stats import PhaseStat
 
 
 def snapshot_text(
@@ -23,12 +24,13 @@ def snapshot_text(
     now: datetime,
     repo: Path | None,
     base_url: str | None = None,
+    phases: dict[str, PhaseStat] | None = None,
 ) -> str:
     console = Console(record=True, width=110, file=io.StringIO())
     where = repo or "no .sandcastle/logs found"
     console.print(f"[dim]sandcastle-dash · {where} · {now.astimezone():%H:%M:%S}[/]")
     for title, (renderable, summary) in (
-        ("Now", now_table(state, runs, now)),
+        ("Now", now_table(state, runs, now, phases=phases)),
         ("Recent runs (24h)", runs_table(runs, now)),
         ("Issue queue", queue_table(rows)),
         ("Resolved (last 10)", resolved_table(done, now)),
