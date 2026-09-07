@@ -27,6 +27,7 @@ _TAIL_CAP = timedelta(minutes=30)
 _READ_ONLY = {
     "grep", "rg", "sed", "cat", "ls", "find", "head", "tail", "wc", "tree", "diff", "awk", "stat",
 }
+_CD_PREFIX = re.compile(r"^[\s(]*cd\s+\S+\s*(?:;|&&)\s*")
 _LIFECYCLE = re.compile(
     r"^(Iteration |Reusing |Agent (started|stopped)|Capturing |Syncing |Collecting "
     r"|Run complete|Context window|Agent signaled)"
@@ -39,6 +40,9 @@ def categorize(line: str) -> str:
         cmd = bash.group(1)
         if re.search(r"validate|playwright|vitest|npm test|typecheck|\btsc\b", cmd):
             return "verify"
+        # Agents prefix most commands with `cd <workspace>;` or `cd … &&`:
+        # classify what runs after it, not the cd.
+        cmd = _CD_PREFIX.sub("", cmd)
         head = re.match(r"^[\s(]*([\w./-]+)", cmd)
         tok = head.group(1) if head else ""
         if tok in ("git", "gh"):

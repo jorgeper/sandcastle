@@ -20,7 +20,80 @@ GRUVBOX = {
     "track": "#504945",
 }
 
+# One color per step category (see breakdown.CATEGORIES); the stats bar and
+# the Now section share it so "olive = tests" holds everywhere.
+CATEGORY_COLOR = {
+    "verify": GRUVBOX["green"],
+    "edit": GRUVBOX["yellow"],
+    "explore": GRUVBOX["blue"],
+    "git": GRUVBOX["purple"],
+    "think": GRUVBOX["orange"],
+    "other": GRUVBOX["gray"],
+}
+
 STATUS_GLYPH = {"success": "✓", "failed": "✗", "running": "●", "interrupted": "○"}
+
+KIND_LABELS = {
+    "session": "Session (5h)",
+    "five_hour": "Session (5h)",
+    "seven_day": "Week (all models)",
+    "weekly_all": "Week (all models)",
+    "weekly_scoped": "Week (Opus/Fable)",
+    "seven_day_opus": "Week (Opus)",
+    "seven_day_sonnet": "Week (Sonnet)",
+}
+
+
+def limit_label(kind: str) -> str:
+    return KIND_LABELS.get(kind, kind.replace("_", " ").title())
+
+
+def fmt_tokens(n: int) -> str:
+    if n >= 1_000_000_000:
+        return f"{n / 1e9:.1f}B"
+    if n >= 1_000_000:
+        return f"{n / 1e6:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1e3:.1f}K"
+    return str(n)
+
+
+def fmt_countdown(delta_seconds: float) -> str:
+    """'2h 10m', '1d 3h 5m', or 'now' once the moment has passed."""
+    secs = int(delta_seconds)
+    if secs <= 0:
+        return "now"
+    days, rem = divmod(secs, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes = rem // 60
+    return f"{days}d {hours}h {minutes}m" if days else f"{hours}h {minutes}m"
+
+
+def fmt_when(moment: datetime, now: datetime) -> str:
+    """Local weekday + clock, then how far away: 'Sat 23:49 (in 2h 10m)'."""
+    countdown = fmt_countdown((moment - now).total_seconds())
+    tail = "now" if countdown == "now" else f"in {countdown}"
+    return f"{moment.astimezone():%a %H:%M} ({tail})"
+
+
+def fmt_resets(until: datetime | None, now: datetime) -> str:
+    if until is None:
+        return ""
+    if (until - now).total_seconds() <= 0:
+        return "resetting…"
+    return f"resets {fmt_when(until, now)}"
+
+
+def meter(percent: float, width: int = 40) -> Text:
+    """A rate-limit bar with its percentage; green under 60, yellow under 85, then red."""
+    percent = max(0.0, min(100.0, percent))
+    filled = round(width * percent / 100)
+    color = GRUVBOX["green"] if percent < 60 else GRUVBOX["yellow"] if percent < 85 else GRUVBOX["red"]
+    text = Text()
+    text.append("█" * filled, style=color)
+    text.append("░" * (width - filled), style=GRUVBOX["track"])
+    text.append(f" {percent:3.0f}%", style=f"bold {color}")
+    return text
 
 _STATUS_COLOR = {
     "success": GRUVBOX["green"],

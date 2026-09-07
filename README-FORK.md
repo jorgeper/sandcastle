@@ -15,6 +15,13 @@ with outcomes and errors, the issue queue with effort tiers and a stage per
 issue, and 7-day stats. Read-only, local files plus `gh`/`git`; the
 TypeScript library is untouched. See `dash/README.md`.
 
+0.3.0 adds a **Rate limits** first section ported from claude-usage-tui
+(Session/Week meters from the OAuth usage endpoint with reset countdowns,
+an exhaustion warning, and the last hour's burn from local transcripts;
+30-minute poll with backoff), and category colors in the Now section: the
+sparkline, the recent log lines and a "doing <category> <age>" label share
+the Stats bar's palette, with a legend.
+
 0.2.0 adds: issue and PR numbers are clickable (a Textual click action plus
 an OSC 8 hyperlink, so both a plain click and Cmd+click work); a **Resolved
 (last 10)** section listing the newest closed issues with the merge that

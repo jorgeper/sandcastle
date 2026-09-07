@@ -5,8 +5,10 @@ source keeps its last content and names the error in the section title."""
 from __future__ import annotations
 
 import argparse
+from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from importlib.metadata import version
 from pathlib import Path
 
@@ -14,22 +16,41 @@ from rich.console import RenderableType
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
+from textual.timer import Timer
 from textual.widgets import Collapsible, Footer, Static
 
 from sandcastle_dash import gh
 from sandcastle_dash.config import TemplateConfig, load_config
+from sandcastle_dash.limits import (
+    POLL_SECONDS,
+    Limit,
+    describe_error,
+    fetch_limits,
+    next_poll_delay,
+    project_exhaustion,
+)
 from sandcastle_dash.logs import Run, load_runs, read_timings
 from sandcastle_dash.orchestrator import derive_state, find_loop_process
 from sandcastle_dash.links import issue_url
 from sandcastle_dash.orchestrator import LoopState
-from sandcastle_dash.panels import now_table, queue_table, resolved_table, runs_table, stats_view
+from sandcastle_dash.panels import (
+    limits_view,
+    now_table,
+    queue_table,
+    resolved_table,
+    runs_table,
+    stats_view,
+)
 from sandcastle_dash.queue import Row, branch_name, build_queue
 from sandcastle_dash.repo import find_repo, logs_dir
 from sandcastle_dash.resolved import Resolved, build_resolved
 from sandcastle_dash.snapshot import snapshot_text
 from sandcastle_dash.stats import PhaseStat, category_totals, per_day, phase_stats
+from sandcastle_dash.usage import DEFAULT_ROOT, Burn, burn_rate, scan_recent
 
+# (id, title, refresh seconds); limits polls on its own backoff timer.
 SECTIONS = [
+    ("limits", "Rate limits", None),
     ("now", "Now", 5),
     ("runs", "Recent runs (24h)", 5),
     ("queue", "Issue queue", 45),
@@ -111,9 +132,19 @@ class DashApp(App):
     Contents Static { padding: 0 2 1 2; height: auto; }
     """
 
-    def __init__(self, repo: Path | None) -> None:
+    def __init__(
+        self,
+        repo: Path | None,
+        fetch: Callable[[], list[Limit]] = fetch_limits,
+        transcripts: Path = DEFAULT_ROOT,
+    ) -> None:
         super().__init__()
         self.repo = repo
+        self._fetch_limits = fetch
+        self._transcripts = transcripts
+        self._limit_samples: dict[str, deque[tuple[datetime, float]]] = {}
+        self._limits_delay: float = POLL_SECONDS
+        self._limits_timer: Timer | None = None
         self._cfg = load_config(repo) if repo else NO_CONFIG
         self._gh = GhState()
         self._runs: list[Run] = []
@@ -130,6 +161,7 @@ class DashApp(App):
     def on_mount(self) -> None:
         self.theme = "gruvbox"
         self.sub_title = str(self.repo) if self.repo else "no .sandcastle/logs found — pass --repo"
+        self.refresh_limits()
         self.refresh_live()
         self.refresh_queue()
         self.refresh_stats()
@@ -163,11 +195,20 @@ class DashApp(App):
     def action_refresh(self) -> None:
         if self.repo:
             self._cfg = load_config(self.repo)
+        self.refresh_limits()
         self.refresh_live()
         self.refresh_queue()
         self.refresh_stats()
 
     # ---- workers ---------------------------------------------------------
+    def refresh_limits(self) -> None:
+        # A manual `r` or the timer firing: drop any pending timer so the poll
+        # is never double-scheduled.
+        if self._limits_timer:
+            self._limits_timer.stop()
+            self._limits_timer = None
+        self.run_worker(self._load_limits, thread=True, exclusive=True, group="limits")
+
     def refresh_live(self) -> None:
         self.run_worker(self._load_live, thread=True, exclusive=True, group="live")
 
@@ -177,18 +218,52 @@ class DashApp(App):
     def refresh_stats(self) -> None:
         self.run_worker(self._load_stats, thread=True, exclusive=True, group="stats")
 
-    def _stamp(self, cid: str, summary: str, error: str | None = None) -> None:
+    def _stamp(
+        self, cid: str, summary: str, error: str | None = None, next_at: datetime | None = None
+    ) -> None:
         base = next(title for c, title, _ in SECTIONS if c == cid)
         parts = [base, summary, f"updated {datetime.now().astimezone():%H:%M:%S}"]
+        if next_at:
+            parts.append(f"next {next_at.astimezone():%H:%M}")
         if error:
             parts.append(error)
         self.query_one(f"#sec-{cid}", Collapsible).title = " · ".join(p for p in parts if p)
+
+    def _show_limits(
+        self, failed: bool, renderable: RenderableType | None, summary: str, error: str | None
+    ) -> None:
+        """Arm the next poll (backing off after failures, e.g. HTTP 429) and
+        stamp the title with when it fires. A failure keeps the last meters."""
+        self._limits_delay = next_poll_delay(self._limits_delay, failed)
+        self._limits_timer = self.set_timer(self._limits_delay, self.refresh_limits)
+        next_at = datetime.now(timezone.utc) + timedelta(seconds=self._limits_delay)
+        if renderable is not None:
+            self.query_one("#panel-limits", Panel).show(renderable)
+        self._stamp("limits", summary, error, next_at)
 
     def _show(
         self, cid: str, renderable: RenderableType, summary: str, error: str | None = None
     ) -> None:
         self.query_one(f"#panel-{cid}", Panel).show(renderable)
         self._stamp(cid, summary, error)
+
+    def _load_limits(self) -> None:
+        now = _now()
+        try:
+            limits = self._fetch_limits()
+        except Exception as exc:  # degrade, never crash the section
+            self.call_from_thread(self._show_limits, True, None, "", f"unavailable: {describe_error(exc)}")
+            return
+        projections: dict[str, datetime] = {}
+        for limit in limits:
+            samples = self._limit_samples.setdefault(limit.kind, deque(maxlen=8))
+            samples.append((now, limit.percent))
+            eta = project_exhaustion(list(samples), now)
+            if eta:
+                projections[limit.kind] = eta
+        burn = burn_rate(scan_recent(self._transcripts, now))
+        view, summary = limits_view(limits, now, projections, burn)
+        self.call_from_thread(self._show_limits, False, view, f"live · {summary}", None)
 
     def _tick(self) -> None:
         """Redraw the Now section from cached data at a fresh `now`, so the
@@ -249,6 +324,14 @@ class DashApp(App):
 
 def run_once(repo: Path | None) -> None:
     now = _now()
+    limits: list[Limit] | None = None
+    limits_error: str | None = None
+    burn: Burn | None = None
+    try:
+        limits = fetch_limits()
+        burn = burn_rate(scan_recent(DEFAULT_ROOT, now))
+    except Exception as exc:
+        limits_error = f"unavailable: {describe_error(exc)}"
     runs = load_runs(logs_dir(repo), now) if repo else []
     state = derive_state(find_loop_process(now), runs)
     cfg = load_config(repo) if repo else NO_CONFIG
@@ -260,16 +343,20 @@ def run_once(repo: Path | None) -> None:
     if repo:
         timings = read_timings(logs_dir(repo) / "timings.jsonl")
         phases = {p.phase: p for p in phase_stats(timings, now)}
-    print(snapshot_text(state, runs, rows, done, now, repo, base_url, phases), end="")
+    print(
+        snapshot_text(state, runs, rows, done, now, repo, base_url, phases, limits, limits_error, burn),
+        end="",
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="sandcastle-dash",
         description="Terminal dashboard for the Sandcastle goal-template loop: live agents, "
-        "recent runs, issue queue, resolved issues, 7-day stats. Reads .sandcastle/logs plus "
-        "gh/git from the local checkout. Esc/q quits, r refreshes, o opens the newest run's "
-        "issue, 1-5 toggle sections. Issue and PR numbers are clickable.",
+        "rate limits, live agents, recent runs, issue queue, resolved issues, 7-day stats. "
+        "Reads .sandcastle/logs plus gh/git from the local checkout, and the OAuth usage "
+        "endpoint for the meters. Esc/q quits, r refreshes, o opens the newest run's issue, "
+        "1-6 toggle sections. Issue and PR numbers are clickable.",
     )
     parser.add_argument(
         "--repo", type=Path, help="repository checkout to watch (default: walk up from the cwd)"

@@ -2,11 +2,15 @@ from datetime import datetime, timedelta, timezone
 
 from sandcastle_dash.activity import (
     activity_buckets,
+    bucket_categories,
+    doing,
     duration_bar,
     heartbeat,
+    line_category,
     line_stamps,
     recent_lines,
     sparkline,
+    stamped_lines,
 )
 from sandcastle_dash.logs import Run
 from sandcastle_dash.stats import PhaseStat
@@ -64,3 +68,26 @@ def test_duration_bar_fills_toward_median_then_warns() -> None:
     assert "#fb4934" in str(beyond.spans[0].style)
     assert duration_bar(300_000, None).plain == "░░░░░░░░░░"
     assert duration_bar(None, stat).plain == "░░░░░░░░░░"
+
+
+def test_stamped_lines_and_doing_classify_the_newest_line() -> None:
+    run = _run("[23:05:10] Read(a.ts)\n[23:09:30] Bash(npm run validate:quick)\n")
+    assert [c for _, c in stamped_lines(run)] == ["explore", "verify"]
+    label, age = doing(run, NOW)
+    assert label == "tests / verify" and age == timedelta(seconds=30)
+    assert doing(_run("no stamps"), NOW) is None
+    assert line_category("[23:05:10] Edit(x)") == "edit" and line_category("hmm") == "think"
+
+
+def test_bucket_categories_pick_the_dominant_one_and_color_the_sparkline() -> None:
+    stamped = [
+        (NOW - timedelta(seconds=5), "explore"),
+        (NOW - timedelta(seconds=8), "verify"),
+        (NOW - timedelta(seconds=9), "verify"),
+        (NOW - timedelta(seconds=40), "think"),
+    ]
+    cats = bucket_categories(stamped, NOW)
+    assert cats[-1] == "verify" and cats[-2] == "think" and cats[0] is None
+    text = sparkline(activity_buckets([m for m, _ in stamped], NOW), cats)
+    styles = [str(sp.style) for sp in text.spans]
+    assert styles[-1] == "#b8bb26" and styles[-2] == "#fe8019"

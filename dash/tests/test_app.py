@@ -8,6 +8,7 @@ from pathlib import Path
 from textual.widgets import Collapsible
 
 from sandcastle_dash.app import DashApp
+from sandcastle_dash.limits import Limit
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -20,20 +21,37 @@ def test_app_boots_renders_and_toggles(tmp_path: Path) -> None:
     shutil.copy(FIXTURES / "config.mts", tmp_path / ".sandcastle" / "config.mts")
 
     async def drive() -> None:
-        app = DashApp(tmp_path)
+        calls = {"n": 0}
+
+        def fake_fetch() -> list[Limit]:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise TimeoutError("timed out")
+            return [Limit("session", 3.0), Limit("weekly_scoped", 1.0)]
+
+        app = DashApp(tmp_path, fetch=fake_fetch, transcripts=tmp_path / "no-transcripts")
         async with app.run_test(size=(120, 40)) as pilot:
             await app.workers.wait_for_complete()
             await pilot.pause()
             titles = {
                 cid: app.query_one(f"#sec-{cid}", Collapsible).title
-                for cid in ("now", "runs", "queue", "resolved", "stats")
+                for cid in ("limits", "now", "runs", "queue", "resolved", "stats")
             }
             assert all("updated" in title for title in titles.values()), titles
+            # first poll failed: the error is named, the next poll is armed with backoff
+            assert "unavailable: TimeoutError: timed out" in titles["limits"] and "next" in titles["limits"]
+            assert app._limits_delay == 60 * 60
+            await pilot.press("r")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            limits_title = app.query_one("#sec-limits", Collapsible).title
+            assert "live · Session (5h) 3%" in limits_title and app._limits_delay == 30 * 60
+            titles["stats"] = app.query_one("#sec-stats", Collapsible).title
             assert "runs" in titles["runs"]
             assert "gh:" in titles["queue"]  # no gh here → the error is named, not fatal
             stats = app.query_one("#sec-stats", Collapsible)
             assert stats.collapsed
-            await pilot.press("5")
+            await pilot.press("6")
             assert not stats.collapsed
             assert "resolved" in titles["resolved"]
             # the fixture log is running → the live cache holds phase stats for the bar

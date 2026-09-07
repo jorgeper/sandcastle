@@ -87,6 +87,7 @@ def test_snapshot_text_is_plain(tmp_path: Path) -> None:
     )
     assert "idle" in text and "Recent runs" in text and "Issue queue" in text
     assert "Resolved (last 10)" in text and f"links: {BASE}/issues/<n>" in text
+    assert "Rate limits" in text and "no meters yet" in text
 
 
 BASE = "https://github.com/jorgeper/marky-mark"
@@ -155,6 +156,8 @@ def test_now_table_shows_heartbeat_bar_and_sparkline(tmp_path: Path) -> None:
     assert "vs median" in text and "█" in text  # the run started long ago → bar full
     assert "log lines, last 5m" in text
     assert "Let me look at the failing test." in text  # the block's newest lines, not a path
+    assert "■ tests / verify" in text  # the category legend names the colors
+    assert "thinking" in text  # the newest line is prose → doing: thinking
     assert "tail -f" not in text
     # the heartbeat fades: fresh activity is a filled dot, silence a hollow one
     def row(rendered: str) -> str:
@@ -162,3 +165,25 @@ def test_now_table_shows_heartbeat_bar_and_sparkline(tmp_path: Path) -> None:
 
     assert "●" in row(_render(now_table(state, runs, now)[0]))
     assert "○" in row(_render(now_table(state, runs, now + timedelta(seconds=30))[0]))
+
+
+def test_limits_view_renders_meters_warning_and_burn() -> None:
+    from sandcastle_dash.limits import Limit
+    from sandcastle_dash.panels import limits_view
+    from sandcastle_dash.usage import Burn
+
+    now = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
+    limits = [
+        Limit("session", 3.0, resets_at=now + timedelta(hours=4, minutes=50)),
+        Limit("weekly_scoped", 61.0, resets_at=now + timedelta(days=6)),
+    ]
+    view, summary = limits_view(
+        limits, now, {"weekly_scoped": now + timedelta(days=2)}, Burn(701.0, 8.0, 43)
+    )
+    text = _render(view)
+    assert summary == "Week (Opus/Fable) 61%"
+    assert "Session (5h)" in text and "3%" in text and "(in 4h 50m)" in text
+    assert "⚠ at this pace, hits 100%" in text
+    assert "701 out-tok/min · $8/h API value · 43 calls" in text
+    empty, summary = limits_view(None, now)
+    assert summary == "" and "no meters" in _render(empty)

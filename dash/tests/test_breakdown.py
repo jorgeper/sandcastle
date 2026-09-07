@@ -52,3 +52,12 @@ def test_breakdown_needs_two_events() -> None:
         "[10:00:00] only\n",
     )
     assert all(v == 0 for v in run_breakdown(run, stamp).values())
+
+
+def test_categorize_looks_past_a_leading_cd() -> None:
+    from sandcastle_dash.breakdown import categorize
+
+    assert categorize("Bash(cd /home/agent/workspace; sed -n 1,5p x.log)") == "explore"
+    assert categorize("Bash(cd /w && git status)") == "git"
+    assert categorize("Bash(cd /w; npm run validate:quick)") == "verify"
+    assert categorize("Bash(cd /w)") == "other"

@@ -11,39 +11,43 @@ from rich.text import Text
 
 from sandcastle_dash.activity import (
     activity_buckets,
+    bucket_categories,
+    doing,
     duration_bar,
     heartbeat,
+    line_category,
     line_stamps,
     recent_lines,
     sparkline,
+    stamped_lines,
 )
 from sandcastle_dash.breakdown import CATEGORIES
 from sandcastle_dash.format import (
+    CATEGORY_COLOR,
     GRUVBOX,
     STATUS_GLYPH,
     fmt_ago,
     fmt_clock,
     fmt_duration,
+    fmt_resets,
+    fmt_tokens,
+    fmt_when,
+    limit_label,
+    meter,
     segment_bar,
     status_style,
 )
+from sandcastle_dash.limits import Limit
 from sandcastle_dash.links import issue_link, link_text, pr_url
 from sandcastle_dash.logs import Run
 from sandcastle_dash.orchestrator import LoopState
 from sandcastle_dash.queue import Row
 from sandcastle_dash.resolved import Resolved
 from sandcastle_dash.stats import Day, PhaseStat
+from sandcastle_dash.usage import Burn
 
 RUNS_LIMIT = 15
-
-_CAT_COLOR = {
-    "verify": GRUVBOX["green"],
-    "edit": GRUVBOX["yellow"],
-    "explore": GRUVBOX["blue"],
-    "git": GRUVBOX["purple"],
-    "think": GRUVBOX["orange"],
-    "other": GRUVBOX["gray"],
-}
+_CAT_COLOR = CATEGORY_COLOR
 _TONE = {
     "working": GRUVBOX["green"],
     "held": GRUVBOX["yellow"],
@@ -54,6 +58,57 @@ _TONE = {
 
 def _issue_label(run: Run, base_url: str | None = None, style: str = "") -> Text:
     return issue_link(run.issue, base_url, style, fallback=run.scope)
+
+
+def category_legend(keys: list[str] | None = None) -> Text:
+    """'■ tests / verify  ■ read / search …' in category colors."""
+    legend = Text("  ")
+    for key, label in CATEGORIES:
+        if keys is None or key in keys:
+            legend.append("■ ", style=_CAT_COLOR[key])
+            legend.append(f"{label}  ", style="dim")
+    return legend
+
+
+def limits_view(
+    limits: list[Limit] | None,
+    now: datetime,
+    projections: dict[str, datetime] | None = None,
+    burn: Burn | None = None,
+) -> tuple[RenderableType, str]:
+    """Rate-limit meters with reset countdowns, an exhaustion warning when a
+    meter is on pace to hit 100% before it resets, and the last hour's burn."""
+    if not limits:
+        return Text("  no meters yet", style="dim"), ""
+    table = Table.grid(padding=(0, 2))
+    table.add_column(min_width=18, no_wrap=True)
+    table.add_column()
+    table.add_column(style="dim")
+    for limit in limits:
+        table.add_row(limit_label(limit.kind), meter(limit.percent), fmt_resets(limit.resets_at, now))
+        eta = (projections or {}).get(limit.kind)
+        if eta and limit.resets_at and eta < limit.resets_at:
+            table.add_row(
+                "",
+                Text(
+                    f"⚠ at this pace, hits 100% ~{fmt_when(eta, now)}, "
+                    f"before the reset {fmt_when(limit.resets_at, now)}",
+                    style=GRUVBOX["yellow"],
+                ),
+                "",
+            )
+    if burn and burn.calls:
+        table.add_row(
+            Text("Burn (last hour)", style="dim"),
+            Text(
+                f"{fmt_tokens(round(burn.output_tokens_per_min))} out-tok/min · "
+                f"${burn.cost_per_hour:,.0f}/h API value · {burn.calls} calls",
+                style="dim",
+            ),
+            "",
+        )
+    binding = max(limits, key=lambda l: l.percent)
+    return table, f"{limit_label(binding.kind)} {binding.percent:.0f}%"
 
 
 def _age(delta: timedelta) -> str:
@@ -125,16 +180,29 @@ def now_table(
         parts.append(table)
         for run in running:
             parts.append(Text(""))
+            stamped = stamped_lines(run)
             head_line = Text("  ")
             head_line.append(run.role, style=GRUVBOX["aqua"])
             head_line.append(" ")
             head_line.append_text(_issue_label(run, base_url))
             head_line.append("  ")
-            head_line.append_text(sparkline(activity_buckets(line_stamps(run), now)))
+            head_line.append_text(
+                sparkline(activity_buckets(line_stamps(run), now), bucket_categories(stamped, now))
+            )
             head_line.append("  log lines, last 5m", style="dim")
+            current = doing(run, now)
+            if current:
+                label, age = current
+                cat = stamped[-1][1]
+                head_line.append("  · ", style="dim")
+                head_line.append(f"{label} {fmt_duration(age.total_seconds() * 1000)}", style=_CAT_COLOR.get(cat, ""))
             parts.append(head_line)
             for line in recent_lines(run):
-                parts.append(Text(f"    {line}", style="dim", no_wrap=True, overflow="ellipsis"))
+                parts.append(
+                    Text(f"    {line}", style=_CAT_COLOR.get(line_category(line), "dim"), no_wrap=True, overflow="ellipsis")
+                )
+        parts.append(Text(""))
+        parts.append(category_legend())
     elif state.running:
         parts.append(Text("  no agent in flight (between phases)", style="dim"))
     return Group(*parts), summary
