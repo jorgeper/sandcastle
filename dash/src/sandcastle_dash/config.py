@@ -9,7 +9,8 @@ from pathlib import Path
 
 _SPEC_DIR = re.compile(r'export const SPEC_DIR\s*=\s*"([^"]+)"')
 _TIERS_BLOCK = re.compile(r"export const EFFORT_TIERS\s*=\s*\[(.*?)\]", re.S)
-_TIER = re.compile(r'\{\s*name:\s*"([^"]+)"\s*,\s*model:\s*"([^"]+)"\s*\}')
+# Tolerates extra fields between name and model (e.g. harness: "codex").
+_TIER = re.compile(r'\{\s*name:\s*"([^"]+)"[^}]*?\bmodel:\s*"([^"]+)"')
 _AGENTS_BLOCK = re.compile(r"export const AGENT_TIERS\s*=\s*\{(.*?)\}", re.S)
 _AGENT = re.compile(r'^\s*"?([\w-]+)"?\s*:\s*"([^"]+)"', re.M)
 

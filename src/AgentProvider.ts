@@ -245,6 +245,24 @@ export const composeClaudeGoalPrompt = ({
 }: GoalPromptOptions): string =>
   `/goal ${goal.trim()}, and you have emitted ${completionSignal} — or stop after ${maxTurns} turns`;
 
+/**
+ * Compose the Codex goal-mode prompt. Codex has no `/goal` judge, so the
+ * goal-loop semantics are spelled out in the prompt itself: work until the
+ * condition verifiably holds, emit the completion signal only then (the
+ * orchestrator's substring detection distinguishes goal-met from a bounded
+ * exit), and treat the turn bound as a work budget for one `codex exec` run.
+ */
+export const composeCodexGoalPrompt = ({
+  goal,
+  maxTurns,
+  completionSignal,
+}: GoalPromptOptions): string =>
+  [
+    `Work autonomously until this condition is verifiably met: ${goal.trim()}.`,
+    `Run the checks the condition names before concluding. When — and only when — the condition holds, end your final message with exactly this line: ${completionSignal}`,
+    `If the condition still does not hold after roughly ${maxTurns} rounds of work, stop WITHOUT emitting that line and summarize what remains to be done.`,
+  ].join("\n");
+
 /** Return type of buildPrintCommand — command string plus optional stdin content.
  *  When `stdin` is set, the sandbox pipes it to the child process's stdin
  *  instead of inlining the prompt in argv, avoiding the Linux 128 KB per-arg limit. */
@@ -815,6 +833,7 @@ export const codex = (
   options?: CodexOptions,
 ): AgentProvider & { readonly sessionStorage: AgentSessionStorage } => ({
   name: "codex",
+  model,
   env: options?.env ?? {},
   captureSessions: options?.captureSessions ?? true,
   sessionStorage: makeCodexSessionStorage(options),
@@ -857,6 +876,10 @@ export const codex = (
     const args = ["codex", "--model", model];
     if (prompt) args.push(prompt);
     return args;
+  },
+
+  composeGoalPrompt(goalOptions: GoalPromptOptions): string {
+    return composeCodexGoalPrompt(goalOptions);
   },
 
   parseStreamLine(line: string): ParsedStreamEvent[] {

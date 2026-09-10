@@ -151,7 +151,7 @@ export const resolveGoalPrompt = (opts: {
     throw new GoalNotSupportedError({
       message:
         `The "${opts.provider.name}" provider does not support goal mode (RunOptions.goal). ` +
-        "Use claudeCode, or drive the loop with prompt/promptFile and maxIterations.",
+        "Use claudeCode or codex, or drive the loop with prompt/promptFile and maxIterations.",
       provider: opts.provider.name,
     });
   }

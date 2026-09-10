@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   claudeCode,
+  codex,
   composeClaudeGoalPrompt,
+  composeCodexGoalPrompt,
   cursor,
   GOAL_CONDITION_MAX_CHARS,
 } from "./AgentProvider.js";
@@ -38,6 +40,59 @@ describe("composeClaudeGoalPrompt", () => {
     expect(composed).toBe(
       "/goal typecheck passes, and you have emitted <done/> — or stop after 5 turns",
     );
+  });
+});
+
+describe("composeCodexGoalPrompt", () => {
+  it("spells out the goal loop, signal clause, and work bound in plain prose", () => {
+    const composed = composeCodexGoalPrompt({
+      goal: "all tests pass",
+      maxTurns: 25,
+      completionSignal: "<promise>COMPLETE</promise>",
+    });
+    expect(composed).toContain(
+      "Work autonomously until this condition is verifiably met: all tests pass.",
+    );
+    expect(composed).toContain(
+      "end your final message with exactly this line: <promise>COMPLETE</promise>",
+    );
+    expect(composed).toContain("after roughly 25 rounds of work");
+    expect(composed).not.toMatch(/^\/goal/);
+  });
+
+  it("trims whitespace around the caller's condition", () => {
+    const composed = composeCodexGoalPrompt({
+      goal: "  typecheck passes  ",
+      maxTurns: 5,
+      completionSignal: "<done/>",
+    });
+    expect(composed).toContain("verifiably met: typecheck passes.");
+  });
+
+  it("is wired into the codex provider as composeGoalPrompt", () => {
+    const provider = codex("gpt-5.4");
+    expect(provider.model).toBe("gpt-5.4");
+    expect(
+      provider.composeGoalPrompt?.({
+        goal: "tests pass",
+        maxTurns: 7,
+        completionSignal: "<finished/>",
+      }),
+    ).toBe(
+      composeCodexGoalPrompt({
+        goal: "tests pass",
+        maxTurns: 7,
+        completionSignal: "<finished/>",
+      }),
+    );
+  });
+
+  it("resolves through resolveGoalPrompt without GoalNotSupportedError", () => {
+    const composed = resolveGoalPrompt({
+      provider: codex("gpt-5.4"),
+      goal: "tests pass",
+    });
+    expect(composed).toContain("verifiably met: tests pass.");
   });
 });
 
