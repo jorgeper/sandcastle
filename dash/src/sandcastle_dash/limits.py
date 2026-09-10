@@ -11,9 +11,11 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 KEYCHAIN_SERVICE = "Claude Code-credentials"
+CREDENTIALS_FILE = Path.home() / ".claude" / ".credentials.json"
 POLL_SECONDS = 30 * 60
 POLL_MAX_SECONDS = 2 * 60 * 60
 MIN_PROJECTION_SPAN_SECONDS = 180
@@ -57,10 +59,15 @@ def parse_usage_payload(payload: dict) -> list[Limit]:
 
 
 def _oauth_token() -> str:
-    raw = subprocess.run(
-        ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
-        capture_output=True, text=True, timeout=10, check=True,
-    ).stdout
+    # Claude Code stores the same JSON in the macOS keychain or, elsewhere,
+    # in ~/.claude/.credentials.json.
+    if CREDENTIALS_FILE.exists():
+        raw = CREDENTIALS_FILE.read_text()
+    else:
+        raw = subprocess.run(
+            ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
+            capture_output=True, text=True, timeout=10, check=True,
+        ).stdout
     return json.loads(raw)["claudeAiOauth"]["accessToken"]
 
 
