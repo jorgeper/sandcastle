@@ -16,21 +16,29 @@ Sandcastle is a TypeScript CLI tool that orchestrates AI coding agents inside is
 
 ## Quick Start
 
-### 1. Install
+### 1. Clone and build the local engine
 
 ```bash
-npm install --save-dev @ai-hero/sandcastle
+git clone https://github.com/jorgeper/sandcastle.git
+cd sandcastle
+npm ci --no-audit --no-fund
+npm run build
 ```
 
 ### 2. Initialize
 
-Run `npx @ai-hero/sandcastle init` in your repository to scaffold the config directory:
+From a sibling project, link the private local package and scaffold:
 
 ```bash
-npx @ai-hero/sandcastle init
+cd ../your-project
+npm install --save-dev ../sandcastle --no-audit --no-fund
+node ../sandcastle/dist/main.js init
 ```
 
 This creates a `.sandcastle/` directory with a Dockerfile, prompt file, and configuration.
+No engine package is fetched from or published to a registry. Keep the local
+checkout and rebuild after engine changes. Marky Mark already has its workflow:
+run `npm run doctor` there instead of scaffolding again.
 
 ### 3. Run
 

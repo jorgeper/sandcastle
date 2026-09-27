@@ -1,5 +1,5 @@
 ---
-"@ai-hero/sandcastle": minor
+"sandcastle-local": minor
 ---
 
 Label-routed PRD lane in the goal template: label an issue

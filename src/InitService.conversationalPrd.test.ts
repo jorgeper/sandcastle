@@ -129,8 +129,8 @@ describe("conversational-prd template", () => {
     );
     const issue = await readFile(join(dir, ".sandcastle", "issue.ts"), "utf-8");
     for (const script of [design, decompose, issue]) {
-      expect(script).toContain('from "@ai-hero/sandcastle"');
-      expect(script).toContain('from "@ai-hero/sandcastle/chat"');
+      expect(script).toContain('from "sandcastle-local"');
+      expect(script).toContain('from "sandcastle-local/chat"');
       expect(script).toContain("conversation.");
       expect(script).toContain("chat(");
       expect(script).toContain('from "./shared.ts"');

@@ -1,5 +1,5 @@
 ---
-"@ai-hero/sandcastle": patch
+"sandcastle-local": patch
 ---
 
 Goal template: pushes survive a second machine. Lane branches are pushed

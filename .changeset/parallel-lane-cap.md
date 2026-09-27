@@ -1,5 +1,5 @@
 ---
-"@ai-hero/sandcastle": minor
+"sandcastle-local": minor
 ---
 
 Goal template: `MAX_PARALLEL_LANES` in `.sandcastle/config.mts` caps how

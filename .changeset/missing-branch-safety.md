@@ -1,5 +1,5 @@
 ---
-"@ai-hero/sandcastle": patch
+"sandcastle-local": patch
 ---
 
 Goal template: a locally missing branch is never treated as "merged". A

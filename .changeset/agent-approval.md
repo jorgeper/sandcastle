@@ -1,5 +1,5 @@
 ---
-"@ai-hero/sandcastle": minor
+"sandcastle-local": minor
 ---
 
 Agent-approved PRs in the goal template: label an issue

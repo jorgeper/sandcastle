@@ -628,7 +628,7 @@ const list = async (
  * - `conversation.list()` summarizes conversations for pickers and
  *   observability tooling.
  *
- * Frontends (the Ink chat TUI from `@ai-hero/sandcastle/chat`, a future
+ * Frontends (the Ink chat TUI from `sandcastle-local/chat`, a future
  * Telegram daemon) are stateless renderers over the store.
  */
 export const conversation = {

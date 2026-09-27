@@ -1,5 +1,6 @@
 {
-  "name": "@ai-hero/sandcastle",
+  "name": "sandcastle-local",
+  "private": true,
   "version": "0.12.0",
   "description": "CLI for orchestrating AI agents in isolated sandbox environments",
   "type": "module",
@@ -47,7 +48,6 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "release": "changeset publish",
     "sandcastle": "npm run build && tsx .sandcastle/run.ts",
     "test-podman": "npm run build && tsx --env-file=.sandcastle/.env .sandcastle/test-podman.ts",
     "test-vercel": "npm run build && tsx --env-file=.sandcastle/.env .sandcastle/test-vercel.ts",
@@ -63,7 +63,7 @@
   "packageManager": "npm@10.9.2",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mattpocock/sandcastle"
+    "url": "https://github.com/jorgeper/sandcastle"
   },
   "license": "MIT",
   "devDependencies": {

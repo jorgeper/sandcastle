@@ -179,7 +179,7 @@ The per-conversation directory `.sandcastle/conversations/<id>/` holding `conver
 _Avoid_: "conversation log" (that's the agent log file), "history", "database"
 
 **Frontend**:
-A renderer/input adapter over a **conversation** — the Ink chat TUI (`@ai-hero/sandcastle/chat`) today; a Telegram daemon later. Frontends hold no state: everything they display is replayed from the **conversation store**.
+A renderer/input adapter over a **conversation** — the Ink chat TUI (`sandcastle-local/chat`) today; a Telegram daemon later. Frontends hold no state: everything they display is replayed from the **conversation store**.
 _Avoid_: "gateway" (the transport-agnostic conversation layer as a whole, not one renderer), "UI client", "interface"
 
 **Routing label**:

@@ -14,7 +14,7 @@
 - The parent issue is never labeled `Sandcastle` (PRD 001 invariant); the skills' text must preserve this.
 - Upstream `grilling`/`grill-me` skills are not modified or vendored; `/new-prd` references `/grilling` if present and inlines equivalent interview instructions otherwise.
 - Scaffolded skill/prd files must never overwrite existing files in the user's repo.
-- Repo conventions (CLAUDE.md): run `npm run typecheck` for type checks; add a `.changeset/` entry for user-facing changes (`minor` for new features, package name `@ai-hero/sandcastle`); update `README.md` when public-facing behavior changes.
+- Repo conventions (CLAUDE.md): run `npm run typecheck` for type checks; add a `.changeset/` entry for user-facing changes (`minor` for new features, package name `sandcastle-local`); update `README.md` when public-facing behavior changes.
 - Template prompt files may only use the `{{KEY}}` placeholders that already exist (`VIEW_TASK_COMMAND`, `COMMENT_TASK_COMMAND`, `CLOSE_TASK_COMMAND`, …) — they are substituted per issue tracker by `substituteTemplateArgs`.
 - Prompt wording about `**PRD:**` / `**Parent:**` lines must be conditional ("if present") — the same prompts serve beads/custom trackers and repos that never used `/decompose-prd`.
 
@@ -543,7 +543,7 @@ Create `.changeset/prd-driven-workflow.md`:
 
 ```md
 ---
-"@ai-hero/sandcastle": minor
+"sandcastle-local": minor
 ---
 
 `parallel-planner-with-review` + GitHub Issues now scaffolds a PRD-driven workflow: a `prd/TEMPLATE.md`, and `/new-prd` + `/decompose-prd` Claude Code project skills that take a feature from grilled PRD to a parent issue with Sandcastle-labeled, dependency-ordered sub-issues. The implement prompt reads the PRD via a `**PRD:**` body line, and the merger closes a parent once all its sub-issues are closed.

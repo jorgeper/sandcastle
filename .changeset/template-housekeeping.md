@@ -1,5 +1,5 @@
 ---
-"@ai-hero/sandcastle": patch
+"sandcastle-local": patch
 ---
 
 Goal template and conversational-prd template agents run on `claude-opus-5`

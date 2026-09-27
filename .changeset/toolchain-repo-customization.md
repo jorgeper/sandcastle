@@ -1,5 +1,5 @@
 ---
-"@ai-hero/sandcastle": minor
+"sandcastle-local": minor
 ---
 
 Per-repo customization (prd/007): `sandcastle init` detects a toolchain

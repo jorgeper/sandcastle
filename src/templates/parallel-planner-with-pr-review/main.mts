@@ -36,8 +36,8 @@
 import { readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import * as sandcastle from "@ai-hero/sandcastle";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import * as sandcastle from "sandcastle-local";
+import { docker } from "sandcastle-local/sandboxes/docker";
 import { z } from "zod";
 import { parseEnvFile, prSetupGuide, readPrConfig } from "./env.mts";
 import {

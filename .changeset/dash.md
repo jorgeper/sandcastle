@@ -1,5 +1,5 @@
 ---
-"@ai-hero/sandcastle": minor
+"sandcastle-local": minor
 ---
 
 `sandcastle-dash`: a terminal dashboard for any repo running the goal

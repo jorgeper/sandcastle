@@ -1,5 +1,5 @@
 ---
-"@ai-hero/sandcastle": minor
+"sandcastle-local": minor
 ---
 
 Goal template: a release lane. `/new-release` (scaffolded by init)

@@ -1282,7 +1282,7 @@ Create `.changeset/prd-label-flow.md` (check `.changeset/` first for a duplicate
 
 ```markdown
 ---
-"@ai-hero/sandcastle": minor
+"sandcastle-local": minor
 ---
 
 Label-routed PRD lane in the goal template: label an issue

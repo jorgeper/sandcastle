@@ -1,12 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  claudeCode,
-  conversation,
-  type Conversation,
-} from "@ai-hero/sandcastle";
-import { chat } from "@ai-hero/sandcastle/chat";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { claudeCode, conversation, type Conversation } from "sandcastle-local";
+import { chat } from "sandcastle-local/chat";
+import { docker } from "sandcastle-local/sandboxes/docker";
 import {
   MODEL,
   DESIGN_LABEL,
