@@ -1,10 +1,22 @@
 # Fork changes
 
+## Local-only engine (`feat/local-package`)
+
+The engine is now the private `sandcastle-local` package, consumed from a
+local checkout rather than a package registry. Imports and templates use
+the local name, repository metadata points here, and the release workflow
+only versions changes: it does not publish to npm. Clone, install, and
+build this repository alongside a consuming project such as Marky Mark.
+Agent instructions also enforce fork-only remote writes: no upstream
+remote, explicit owned-repository targets, and pinned local Git/gh defaults.
+`AGENTS.md` links to `CLAUDE.md`, so both harnesses read the same boundary.
+
 This is [jorgeper/sandcastle](https://github.com/jorgeper/sandcastle), a fork
 of [mattpocock/sandcastle](https://github.com/mattpocock/sandcastle). This
 file records every functional change the fork carries on top of upstream —
 one section per change, newest first. Each section names the `feat/*` branch
-that implemented it, so any change can be proposed upstream from its branch.
+that implemented it, for maintenance within this fork only. Changes must
+never be proposed to upstream; see the hard boundary in `AGENTS.md`.
 
 ## Terminal dashboard: `sandcastle-dash` (`feat/dash`)
 
@@ -559,7 +571,7 @@ pipeline — design → decompose → implement — runs as sandboxed agents.
   a turn. v1 is claudeCode-only; others throw
   `ConversationNotSupportedError` (Effect-free wrapper, `CwdError`
   pattern).
-- Frontend: `chat(convo)` on the new `@ai-hero/sandcastle/chat` subpath —
+- Frontend: `chat(convo)` on the new `sandcastle-local/chat` subpath —
   an Ink 7 chat TUI (transcript replayed from the store, markdown
   proposals, option select menus, approve/feedback flow, live agent
   activity stream, non-TTY fallback). Frontends are stateless renderers

@@ -22,14 +22,23 @@ Single-context layout: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/ag
 
 ## Fork workflow
 
-This repo is jorgeper's fork of mattpocock/sandcastle, and it is fully
-isolated from upstream: every remote write — push, PR, issue, comment,
-label — targets `origin` (`jorgeper/sandcastle`) and nothing else.
-**Never open, comment on, or push anything to `mattpocock/sandcastle`.**
-The `upstream` remote is fetch-only (its push URL is disabled) and
-`gh repo set-default` is pinned to the fork; if a command errors because
-it resolved to upstream, repoint it at the fork rather than working
-around the error.
+This repo is an independent working fork. Every remote write targets
+`jorgeper/sandcastle` and nothing else. **Never propose changes to, push to,
+or create/modify PRs, issues, comments, labels, releases, or workflows on
+Sandcastle upstream (`mattpocock/sandcastle`, AI Hero, or a renamed successor).**
+Historical plans or documentation mentioning upstream contributions are
+not permission to make them.
+
+Keep only the owned `origin` remote; do not add an upstream remote, even
+fetch-only. Set `remote.pushDefault=origin`, `push.default=simple`, and
+`gh repo set-default jorgeper/sandcastle` in each fresh checkout. These are
+local settings, not properties inherited from this file or from cloning.
+Before any remote write, verify `git remote -v` and `gh repo set-default --view`.
+Use `gh ... --repo jorgeper/sandcastle` explicitly for repository writes
+(or an explicit `repos/jorgeper/sandcastle/...` API path), and push explicitly
+to the verified `origin`. Never infer a PR target from GitHub's fork parent.
+If a command resolves to upstream, stop and correct the local target; never
+work around the error by targeting upstream or changing these safeguards.
 
 Every change to this fork follows the same pattern:
 
