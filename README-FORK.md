@@ -1,5 +1,17 @@
 # Fork changes
 
+## Copilot execution, sessions and verified goals (`feat/copilot-runtime`)
+
+Copilot now preserves complete native session directories across sandboxes,
+resumes conversations and structured-output retries, and supports goal runs
+when the caller explicitly supplies an independent verifier model. Worker
+claims never bypass verification; malformed verdicts fail rather than imply
+success. Current CLI permissions/reasoning flags and bounded autopilot are
+used, with session forking explicitly rejected. An offline native-CLI smoke
+test proves persisted history survives transfer to a fresh Copilot home.
+The Marky Mark consumer selects the harness/models locally and supplies a
+dedicated sandbox token; Claude behavior remains available unchanged.
+
 ## Local-only engine (`feat/local-package`)
 
 The engine is now the private `sandcastle-local` package, consumed from a
