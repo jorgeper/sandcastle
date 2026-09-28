@@ -1,5 +1,12 @@
 # Fork changes
 
+## Explicit Docker npm registry (`feat/docker-npm-registry`)
+
+`docker build-image --npm-registry` passes a credential-free HTTPS registry
+as `NPM_CONFIG_REGISTRY` without copying host npm settings or tokens. This
+lets work machines use approved package mirrors while personal builds keep
+the Dockerfile default. The consuming Dockerfile must declare the build arg.
+
 ## Copilot execution, sessions and verified goals (`feat/copilot-runtime`)
 
 Copilot now preserves complete native session directories across sandboxes,
