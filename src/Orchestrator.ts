@@ -14,6 +14,10 @@ import { withSandboxLifecycle, type SandboxHooks } from "./SandboxLifecycle.js";
 import type { AgentProvider, IterationUsage } from "./AgentProvider.js";
 import type { Timeouts } from "./run.js";
 import { TextDeltaBuffer } from "./TextDeltaBuffer.js";
+import {
+  goalVerificationPrompt,
+  parseGoalVerdict,
+} from "./GoalVerification.js";
 
 export type { ParsedStreamEvent, IterationUsage } from "./AgentProvider.js";
 
@@ -36,6 +40,7 @@ const invokeAgent = (
   resumeSession?: string,
   forkSession?: boolean,
   signal?: AbortSignal,
+  goalMaxTurns?: number,
 ): Effect.Effect<
   { result: string; sessionId?: string; usage?: IterationUsage },
   SandboxError
@@ -143,6 +148,7 @@ const invokeAgent = (
         dangerouslySkipPermissions: true,
         resumeSession,
         forkSession,
+        goalMaxTurns,
       });
       const execResult = yield* sandbox.exec(printCmd.command, {
         onLine: (line) => {
@@ -254,6 +260,8 @@ export interface OrchestrateOptions {
   readonly prompt: string;
   readonly branch?: string;
   readonly provider: AgentProvider;
+  readonly goal?: string;
+  readonly goalMaxTurns?: number;
   readonly completionSignal?: string | string[];
   /** Idle timeout in seconds. If the agent produces no output for this long, it fails with AgentIdleTimeoutError. Default: 600 (10 minutes) */
   readonly idleTimeoutSeconds?: number;
@@ -271,7 +279,7 @@ export interface OrchestrateOptions {
   readonly name?: string;
   /** @internal Test-only override for the idle warning interval in milliseconds. Default: 60000 (1 minute). */
   readonly _idleWarningIntervalMs?: number;
-  /** Resume a prior Claude Code session by ID. Applied to iteration 1 only. */
+  /** Resume a prior native agent session by ID. Applied to iteration 1 only. */
   readonly resumeSession?: string;
   /**
    * When true alongside `resumeSession`, fork the session instead of mutating
@@ -291,9 +299,9 @@ export interface OrchestrateOptions {
 
 /** Per-iteration result carrying an optional session ID. */
 export interface IterationResult {
-  /** Claude Code session ID extracted from the init line, or undefined for non-Claude agents. */
+  /** Native session ID extracted from the provider's output, when available. */
   readonly sessionId?: string;
-  /** Absolute host path to the captured session JSONL, or undefined when capture is disabled or provider is non-Claude. */
+  /** Absolute host path to the captured journal, when session capture is supported and enabled. */
   readonly sessionFilePath?: string;
   /** Token usage snapshot from the last assistant message in the session, or undefined when capture is disabled or provider does not support usage parsing. */
   readonly usage?: IterationUsage;
@@ -484,7 +492,9 @@ export const orchestrate = (
                   provider,
                   idleTimeoutMs,
                   completionTimeoutMs,
-                  completionSignals,
+                  options.goal !== undefined && provider.goalVerifier
+                    ? []
+                    : completionSignals,
                   onText,
                   onToolCall,
                   onRawLine,
@@ -494,6 +504,7 @@ export const orchestrate = (
                   iterationResumeSession,
                   iterationForkSession,
                   options.signal,
+                  options.goalMaxTurns,
                 );
 
                 // Flush any remaining buffered text deltas
@@ -551,13 +562,72 @@ export const orchestrate = (
                   }
                 }
 
+                // Capture the worker before verification so a failed verifier cannot lose its session.
+                let verifiedGoal: boolean | undefined;
+                let verificationOutput = "";
+                if (options.goal !== undefined && provider.goalVerifier) {
+                  yield* checkAbort();
+                  yield* display.status(
+                    label("Independently verifying goal"),
+                    "info",
+                  );
+                  const verification = yield* invokeAgent(
+                    ctx.sandbox,
+                    ctx.sandboxRepoDir,
+                    goalVerificationPrompt(options.goal),
+                    provider.goalVerifier,
+                    idleTimeoutMs,
+                    completionTimeoutMs,
+                    [],
+                    (text) => {
+                      Effect.runPromise(display.textChunk(text));
+                      Effect.runPromise(
+                        streamEmitter.emit({
+                          type: "text",
+                          message: text,
+                          iteration: i,
+                          timestamp: new Date(),
+                        }),
+                      );
+                    },
+                    onToolCall,
+                    onRawLine,
+                    onIdleWarning,
+                    onCompletionTimeout,
+                    options._idleWarningIntervalMs,
+                    undefined,
+                    undefined,
+                    options.signal,
+                  );
+                  const verdict = yield* Effect.try({
+                    try: () => parseGoalVerdict(verification.result),
+                    catch: (error) =>
+                      new AgentError({
+                        message: `Independent goal verification failed: ${error instanceof Error ? error.message : String(error)}`,
+                      }),
+                  });
+                  verifiedGoal = verdict.met;
+                  verificationOutput = `\nIndependent goal verification: ${JSON.stringify(verdict)}\n`;
+                  yield* display.status(
+                    label(
+                      verdict.met
+                        ? "Goal verified"
+                        : `Goal not met: ${verdict.evidence}`,
+                    ),
+                    verdict.met ? "success" : "warn",
+                  );
+                }
+
                 // Check completion signal
-                const matchedSignal = completionSignals.find((sig) =>
-                  agentOutput.includes(sig),
-                );
+                const matchedSignal =
+                  verifiedGoal === undefined
+                    ? completionSignals.find((sig) => agentOutput.includes(sig))
+                    : verifiedGoal
+                      ? completionSignals[0]
+                      : undefined;
                 return {
                   completionSignal: matchedSignal,
-                  stdout: agentOutput,
+                  stdout: agentOutput + verificationOutput,
                   sessionId,
                   sessionFilePath,
                   usage,

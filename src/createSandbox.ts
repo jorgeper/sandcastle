@@ -31,6 +31,7 @@ import {
   printFileDisplayStartup,
   deriveGoalMet,
   resolveGoalPrompt,
+  DEFAULT_GOAL_MAX_TURNS,
 } from "./run.js";
 import {
   withSandboxLifecycle,
@@ -146,12 +147,12 @@ export interface SandboxRunOptions extends ResumeSandboxRunResultOptions {
   /**
    * Goal mode: a completion condition the agent works toward autonomously
    * within each iteration, judged after every turn by the provider's native
-   * goal engine (Claude Code's `/goal`). Mutually exclusive with `prompt`
-   * and `promptFile`. Providers without native goal support throw
+   * goal engine (Claude Code's `/goal`) or Copilot's independent verifier.
+   * Mutually exclusive with `prompt` and `promptFile`. Providers without goal support throw
    * `GoalNotSupportedError`. See `RunOptions.goal` and ADR 0021.
    */
   readonly goal?: string;
-  /** Inner turn bound per iteration for goal mode. Only meaningful with `goal`. Default: 25. */
+  /** Claude goal turns or Copilot autopilot continuations per iteration. Only meaningful with `goal`. Default: 25. */
   readonly goalMaxTurns?: number;
   /** Resume a prior agent session by id. The session JSONL must exist on the host (captured by a prior `sandbox.run()`). Incompatible with `maxIterations > 1`. */
   readonly resumeSession?: string;
@@ -498,6 +499,11 @@ const buildSandboxHandle = (
               branch: mergeToHead ? undefined : branch,
               provider,
               completionSignal: runOptions.completionSignal,
+              goal: runOptions.goal,
+              goalMaxTurns:
+                runOptions.goal === undefined
+                  ? undefined
+                  : (runOptions.goalMaxTurns ?? DEFAULT_GOAL_MAX_TURNS),
               idleTimeoutSeconds: runOptions.idleTimeoutSeconds,
               completionTimeoutSeconds: runOptions.completionTimeoutSeconds,
               name: runOptions.name,

@@ -1630,9 +1630,13 @@ describe("copilot factory", () => {
     expect(provider.name).toBe("copilot");
   });
 
-  it("does not capture sessions by default", () => {
+  it("captures native Copilot sessions by default", () => {
     const provider = copilot("claude-sonnet-4.5");
-    expect(provider.captureSessions).toBe(false);
+    expect(provider.captureSessions).toBe(true);
+    expect(provider.sessionStorage).toBeDefined();
+    expect(copilot("model", { captureSessions: false }).captureSessions).toBe(
+      false,
+    );
   });
 
   it("buildPrintCommand includes the model and -p prompt", () => {
@@ -1675,10 +1679,10 @@ describe("copilot factory", () => {
     );
   });
 
-  it("buildPrintCommand includes --effort when specified", () => {
+  it("buildPrintCommand includes --reasoning-effort when specified", () => {
     const provider = copilot("claude-sonnet-4.5", { effort: "high" });
     const { command } = provider.buildPrintCommand(opts("test"));
-    expect(command).toContain("--effort high");
+    expect(command).toContain("--reasoning-effort high");
   });
 
   it("buildPrintCommand omits --effort when not specified", () => {
@@ -1687,15 +1691,14 @@ describe("copilot factory", () => {
     expect(command).not.toContain("--effort");
   });
 
-  it("buildPrintCommand ignores resumeSession (resume not yet supported)", () => {
+  it("buildPrintCommand resumes the requested session", () => {
     const provider = copilot("claude-sonnet-4.5");
     const { command } = provider.buildPrintCommand({
       prompt: "test",
       dangerouslySkipPermissions: true,
       resumeSession: "abc-123",
     });
-    expect(command).not.toContain("--resume");
-    expect(command).not.toContain("abc-123");
+    expect(command).toContain("--resume='abc-123'");
   });
 
   it("buildInteractiveArgs includes copilot binary, --model, and prompt", () => {
@@ -1705,6 +1708,33 @@ describe("copilot factory", () => {
     expect(args).toContain("--model");
     expect(args).toContain("claude-sonnet-4.5");
     expect(args).toContain("hello");
+  });
+
+  it("uses explicit independent verifier models and only enables bounded autopilot for goals", () => {
+    const provider = copilot("worker", { goalVerifierModel: "judge" });
+    expect(provider.model).toBe("worker");
+    expect(provider.goalVerifier?.model).toBe("judge");
+    expect(provider.goalVerifier?.goalVerifier).toBeUndefined();
+    expect(copilot("worker").composeGoalPrompt).toBeUndefined();
+    expect(provider.buildPrintCommand(opts("work")).command).not.toContain(
+      "--autopilot",
+    );
+    expect(
+      provider.buildPrintCommand({ ...opts("work"), goalMaxTurns: 3 }).command,
+    ).toContain("--autopilot --max-autopilot-continues 3");
+    expect(() =>
+      provider.buildPrintCommand({ ...opts("work"), goalMaxTurns: 0 }),
+    ).toThrow();
+    expect(() =>
+      provider.buildPrintCommand({
+        ...opts("work"),
+        resumeSession: "id",
+        forkSession: true,
+      }),
+    ).toThrow(/forking is not supported/);
+    expect(
+      provider.buildInteractiveArgs!({ ...opts("work"), resumeSession: "id" }),
+    ).toContain("--resume=id");
   });
 
   it("buildInteractiveArgs seeds the prompt with -i, not -p", () => {

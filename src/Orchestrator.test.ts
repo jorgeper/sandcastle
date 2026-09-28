@@ -20,6 +20,7 @@ import { orchestrate } from "./Orchestrator.js";
 import { substitutePromptArgs } from "./PromptArgumentSubstitution.js";
 import {
   claudeCode,
+  copilot,
   codex as codexFactory,
   opencode as opencodeFactory,
   pi as piFactory,
@@ -105,6 +106,7 @@ const toStreamJson = (output: string, sessionId?: string): string => {
 const makeTestSandboxFactory = (
   hostRepoDir: string,
   buildSandbox: (sandboxDir: string) => SandboxService,
+  bindMountHandle?: BindMountSandboxHandle,
 ): { factoryLayer: Layer.Layer<SandboxFactory>; sandboxRepoDir: string } => {
   const sandboxBaseDir = join(tmpdir(), `orch-factory-${randomUUID()}`);
   const sandboxRepoDir = sandboxBaseDir;
@@ -138,6 +140,7 @@ const makeTestSandboxFactory = (
               hostWorktreePath: sandboxBaseDir,
               sandboxRepoPath: sandboxBaseDir,
               applyToHost: () => Effect.void,
+              bindMountHandle,
             },
             buildSandbox(sandboxBaseDir),
           ) as Effect.Effect<A, E | DockerError, R>,
@@ -198,6 +201,111 @@ const makeMockAgentLayer = (
 };
 
 describe("Orchestrator", () => {
+  it.each([
+    [
+      '{"met":true,"evidence":"Tests and acceptance checks passed."}',
+      true,
+      false,
+    ],
+    ['{"met":false,"evidence":"Required behavior is absent."}', false, false],
+    ["<promise>COMPLETE</promise>", false, true],
+    ["crashed", false, true],
+  ])(
+    "independent Copilot verification gates completion: %s",
+    async (verdict, met, fails) => {
+      const hostDir = await mkdtemp(join(tmpdir(), "orch-copilot-"));
+      try {
+        await initRepo(hostDir);
+        await commitFile(hostDir, "initial.txt", "initial", "initial");
+        const commands: string[] = [];
+        const order: string[] = [];
+        const sessionId = randomUUID();
+        const base = copilot("worker", { goalVerifierModel: "judge" });
+        const provider = {
+          ...base,
+          sessionStorage: {
+            ...base.sessionStorage,
+            captureToHost: async () => {
+              order.push("capture");
+            },
+          },
+        };
+        const handle: BindMountSandboxHandle = {
+          worktreePath: hostDir,
+          exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+          copyFileIn: async () => {},
+          copyFileOut: async () => {},
+          close: async () => {},
+        };
+        const { factoryLayer } = makeTestSandboxFactory(
+          hostDir,
+          (dir) => {
+            const real = makeLocalSandbox(dir);
+            return {
+              ...real,
+              exec: (command, options) => {
+                if (!command.startsWith("copilot "))
+                  return real.exec(command, options);
+                commands.push(command);
+                const verifying = command.includes("--model 'judge'");
+                order.push(verifying ? "verify" : "worker");
+                const output = verifying
+                  ? verdict
+                  : "<promise>COMPLETE</promise>";
+                const stdout = [
+                  JSON.stringify({
+                    type: "assistant.message",
+                    data: { content: output },
+                  }),
+                  JSON.stringify({
+                    type: "result",
+                    sessionId: verifying ? randomUUID() : sessionId,
+                  }),
+                ].join("\n");
+                stdout.split("\n").forEach((line) => options?.onLine?.(line));
+                return Effect.succeed({
+                  stdout,
+                  stderr: "",
+                  exitCode: verifying && verdict === "crashed" ? 1 : 0,
+                });
+              },
+            };
+          },
+          handle,
+        );
+        const execution = Effect.runPromise(
+          orchestrate({
+            provider,
+            hostRepoDir: hostDir,
+            iterations: 1,
+            prompt: "Implement the goal",
+            goal: "Acceptance criteria and tests pass",
+            goalMaxTurns: 3,
+            completionSignal: ["<promise>COMPLETE</promise>"],
+          }).pipe(Effect.provide(Layer.merge(factoryLayer, testDisplayLayer))),
+        );
+        if (fails) {
+          await expect(execution).rejects.toThrow();
+        } else {
+          const result = await execution;
+          expect(result.completionSignal).toBe(
+            met ? "<promise>COMPLETE</promise>" : undefined,
+          );
+          expect(result.iterations[0]?.sessionId).toBe(sessionId);
+        }
+        expect(order).toEqual(["worker", "capture", "verify"]);
+        expect(commands[0]).toContain(
+          "--autopilot --max-autopilot-continues 3",
+        );
+        expect(commands[1]).not.toContain("--autopilot");
+        expect(commands[1]).not.toContain("--resume");
+        expect(commands[1]).toContain("Acceptance criteria and tests pass");
+      } finally {
+        await rm(hostDir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("runs a single iteration: sync-in, agent, sync-out", async () => {
     const hostDir = await mkdtemp(join(tmpdir(), "orch-host-"));
 

@@ -2,7 +2,12 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { claudeCode, cursor, type AgentProvider } from "./AgentProvider.js";
+import {
+  claudeCode,
+  copilot,
+  cursor,
+  type AgentProvider,
+} from "./AgentProvider.js";
 import { ConversationNotSupportedError } from "./ConversationNotSupportedError.js";
 import {
   conversation,
@@ -273,6 +278,41 @@ const makeFakeRunner = (
 };
 
 describe("conversation (mocked runner)", () => {
+  it("Copilot conversations reopen and resume without switching provider, model or session", async () => {
+    const dir = await makeDir();
+    const copilotAgent = copilot("configured-model");
+    const { runner, calls } = makeFakeRunner(
+      [
+        { type: "ask", message: "Details?" },
+        { type: "propose", message: "Draft" },
+      ],
+      ["copilot-session", "copilot-session"],
+    );
+    const first = await conversation.start({
+      name: "copilot",
+      agent: copilotAgent,
+      sandbox,
+      prompt: "Design",
+      dir,
+      runner,
+    });
+    await first.close();
+    const reopened = await conversation.open("copilot", {
+      agent: copilotAgent,
+      sandbox,
+      dir,
+      runner,
+    });
+    await reopened.send("Requirements");
+    expect(calls[1]!.options.resumeSession).toBe("copilot-session");
+    expect(reopened.metadata.agent).toEqual({
+      provider: "copilot",
+      model: "configured-model",
+    });
+    await expect(
+      conversation.open("copilot", { agent, sandbox, dir, runner }),
+    ).rejects.toThrow(/across providers/);
+  });
   it("start composes the opening prompt, runs turn 1, and persists everything", async () => {
     const dir = await makeDir();
     const ask: AgentTurn = {

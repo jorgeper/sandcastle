@@ -49,7 +49,7 @@ export class ConversationError extends Error {
 
 /** Options shared by every conversation operation that runs the agent. */
 interface ConversationRuntimeOptions {
-  /** Agent provider. v1: `claudeCode` only — others throw `ConversationNotSupportedError`. */
+  /** Agent provider. Claude Code and Copilot support durable conversations. */
   readonly agent: AgentProvider;
   /** Sandbox provider the turns run in. */
   readonly sandbox: SandboxProvider;
@@ -165,7 +165,7 @@ const CONVERSATION_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/;
 /** Branch backing a conversation's worktree. */
 export const conversationBranch = (id: string): string => `conversation/${id}`;
 
-const SUPPORTED_PROVIDER = "claude-code";
+const SUPPORTED_PROVIDERS = new Set(["claude-code", "copilot"]);
 
 const assertProviderSupported = (agent: AgentProvider): void => {
   if (!agent.sessionStorage) {
@@ -173,17 +173,17 @@ const assertProviderSupported = (agent: AgentProvider): void => {
       message:
         `The "${agent.name}" provider does not support conversations: ` +
         "conversations resume the agent session on every turn, which requires " +
-        "filesystem-backed sessions (provider.sessionStorage). Use claudeCode.",
+        "filesystem-backed sessions (provider.sessionStorage). Use claudeCode or copilot.",
       provider: agent.name,
       missing: "session-resume",
     });
   }
-  if (agent.name !== SUPPORTED_PROVIDER) {
+  if (!SUPPORTED_PROVIDERS.has(agent.name)) {
     throw new ConversationNotSupportedError({
       message:
-        `The "${agent.name}" provider is not supported for conversations in v1 ` +
-        "(structured-output turn envelopes are only tested against Claude Code). " +
-        "Use claudeCode.",
+        `The "${agent.name}" provider is not supported for conversations ` +
+        "(structured-output turn envelopes are supported for Claude Code and Copilot). " +
+        "Use claudeCode or copilot.",
       provider: agent.name,
       missing: "unsupported-provider",
     });

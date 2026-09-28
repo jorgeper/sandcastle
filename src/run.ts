@@ -151,7 +151,7 @@ export const resolveGoalPrompt = (opts: {
     throw new GoalNotSupportedError({
       message:
         `The "${opts.provider.name}" provider does not support goal mode (RunOptions.goal). ` +
-        "Use claudeCode, or drive the loop with prompt/promptFile and maxIterations.",
+        "Use claudeCode or copilot with an explicit goalVerifierModel, or drive the loop with prompt/promptFile and maxIterations.",
       provider: opts.provider.name,
     });
   }
@@ -447,14 +447,14 @@ export interface RunOptions<A extends AgentProvider = AgentProvider> {
   readonly maxIterations?: number;
   /**
    * Goal mode: a completion condition the agent works toward autonomously
-   * within each iteration, judged after every turn by the provider's native
-   * goal engine (Claude Code's `/goal`). Mutually exclusive with `prompt`
+   * within each iteration, judged by Claude's native `/goal` evaluator or
+   * Copilot's explicitly configured independent verifier. Mutually exclusive with `prompt`
    * and `promptFile` — the composed goal command is the entire prompt.
    *
    * Write the condition as observable end states ("all tests pass", "a
-   * summary comment exists on the issue"), not actions. The provider appends
-   * a completion-signal clause (so `goalMet` can be derived) and the
-   * `goalMaxTurns` bound. Only providers with native goal support accept
+   * summary comment exists on the issue"), not actions. Claude appends a
+   * completion-signal clause; Copilot derives completion only from the verifier.
+   * Only providers with goal support accept
    * this option; others throw `GoalNotSupportedError`.
    *
    * `maxIterations` keeps its meaning as outer fresh-context attempts —
@@ -462,10 +462,9 @@ export interface RunOptions<A extends AgentProvider = AgentProvider> {
    */
   readonly goal?: string;
   /**
-   * Inner turn bound per iteration for goal mode: the provider appends
-   * "or stop after N turns" to the condition, so an attempt that stalls
-   * hands control back to the outer iteration loop for a fresh-context
-   * retry. Only meaningful with `goal`. Default: 25.
+   * Per-attempt bound: Claude native goal turns, or Copilot autopilot
+   * continuations (not all internal model/tool turns).
+   * Only meaningful with `goal`. Default: 25.
    */
   readonly goalMaxTurns?: number;
   /** Lifecycle hooks grouped by execution location (host or sandbox). */
@@ -879,6 +878,11 @@ export async function run(
       branch: orchestrateBranch,
       provider,
       completionSignal: options.completionSignal,
+      goal: options.goal,
+      goalMaxTurns:
+        options.goal === undefined
+          ? undefined
+          : (options.goalMaxTurns ?? DEFAULT_GOAL_MAX_TURNS),
       idleTimeoutSeconds: options.idleTimeoutSeconds,
       completionTimeoutSeconds: options.completionTimeoutSeconds,
       name: options.name,

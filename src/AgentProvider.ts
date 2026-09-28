@@ -21,6 +21,10 @@ import {
   type HostSessionLookup,
 } from "./SessionStore.js";
 import type { BindMountSandboxHandle } from "./SandboxProvider.js";
+import {
+  makeCopilotSessionStorage,
+  type CopilotSessionDirectories,
+} from "./CopilotSessionStorage.js";
 
 const fileExists = async (path: string): Promise<boolean> => {
   try {
@@ -212,6 +216,8 @@ export interface AgentCommandOptions {
    * writes a new session under a fresh id.
    */
   readonly forkSession?: boolean;
+  /** Bound autonomous continuations when running a goal. */
+  readonly goalMaxTurns?: number;
 }
 
 /** Options passed to composeGoalPrompt. */
@@ -303,6 +309,8 @@ export interface AgentProvider {
   readonly captureSessions: boolean;
   /** Provider-owned storage and transfer behavior for resumable agent sessions. */
   readonly sessionStorage?: AgentSessionStorage;
+  /** Independent goal verifier, run in a fresh session in the same sandbox/environment. */
+  readonly goalVerifier?: AgentProvider;
   buildPrintCommand(options: AgentCommandOptions): PrintCommand;
   buildInteractiveArgs?(options: AgentCommandOptions): string[];
   /**
@@ -1140,40 +1148,101 @@ const parseCopilotStreamLine = (line: string): ParsedStreamEvent[] => {
 
 /** Options for the GitHub Copilot CLI agent provider. */
 export interface CopilotOptions {
-  /** Reasoning effort level. Maps to the CLI's --effort flag. */
-  readonly effort?: "low" | "medium" | "high";
+  /** Reasoning effort level. Maps to --reasoning-effort. */
+  readonly effort?:
+    | "none"
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high"
+    | "xhigh"
+    | "max";
   /** Environment variables injected by this agent provider. */
   readonly env?: Record<string, string>;
+  readonly captureSessions?: boolean;
+  readonly sessionStorage?: CopilotSessionDirectories;
+  /** Explicit model for independent verification. Required for goal mode; no implicit model fallback. */
+  readonly goalVerifierModel?: string;
 }
 
 export const copilot = (
   model: string,
   options?: CopilotOptions,
-): AgentProvider => ({
+): AgentProvider & { readonly sessionStorage: AgentSessionStorage } => ({
   name: "copilot",
+  model,
   env: options?.env ?? {},
-  captureSessions: false,
+  captureSessions: options?.captureSessions ?? true,
+  sessionStorage: makeCopilotSessionStorage({
+    ...options?.sessionStorage,
+    sandboxSessionsDir:
+      options?.sessionStorage?.sandboxSessionsDir ??
+      (options?.env?.COPILOT_HOME
+        ? `${options.env.COPILOT_HOME}/session-state`
+        : undefined),
+  }),
+  ...(options?.goalVerifierModel
+    ? {
+        goalVerifier: copilot(options.goalVerifierModel, {
+          env: options.env,
+          captureSessions: false,
+        }),
+        composeGoalPrompt: ({ goal }: GoalPromptOptions) =>
+          `Work autonomously toward this goal. Read the referenced specification and workspace instructions, implement the requirements, and run the required checks. Report the evidence and any remaining blockers honestly. An independent verifier will determine completion.\n\nGoal:\n${goal.trim()}`,
+      }
+    : {}),
 
-  // Copilot CLI does expose `--resume <id>`, but its session state is indexed by
-  // a SQLite database alongside the JSONL files in ~/.copilot/session-state/, so
-  // transferring a single session file between host and sandbox is not enough to
-  // make resume work (see ADR 0016). Until the round-trip is verified end-to-end,
-  // copilot is non-resumable: captureSessions is false, there is no sessionStorage,
-  // and resumeSession is ignored here — like cursor, pi, and opencode.
   buildPrintCommand({
     prompt,
     dangerouslySkipPermissions,
+    resumeSession,
+    forkSession,
+    goalMaxTurns,
   }: AgentCommandOptions): PrintCommand {
+    if (forkSession)
+      throw new Error(
+        "Copilot session forking is not supported; use resume without forkSession.",
+      );
     assertCopilotPrintPromptFitsArgv(prompt);
-    const allowAll = dangerouslySkipPermissions ? " --allow-all-tools" : "";
-    const effortFlag = options?.effort ? ` --effort ${options.effort}` : "";
+    const allowAll = dangerouslySkipPermissions
+      ? " --allow-all-tools --allow-all-paths --allow-all-urls"
+      : "";
+    const effortFlag = options?.effort
+      ? ` --reasoning-effort ${options.effort}`
+      : "";
+    const resumeFlag = resumeSession
+      ? ` --resume=${shellEscape(resumeSession)}`
+      : "";
+    if (
+      goalMaxTurns !== undefined &&
+      (!Number.isInteger(goalMaxTurns) || goalMaxTurns < 1)
+    ) {
+      throw new Error("Copilot goalMaxTurns must be a positive integer.");
+    }
+    const autopilotFlag =
+      goalMaxTurns === undefined
+        ? ""
+        : ` --autopilot --max-autopilot-continues ${goalMaxTurns}`;
     return {
-      command: `copilot -p ${shellEscape(prompt)} --output-format json --model ${shellEscape(model)}${allowAll}${effortFlag}`,
+      command: `copilot -p ${shellEscape(prompt)} --output-format json --model ${shellEscape(model)}${allowAll}${effortFlag}${resumeFlag}${autopilotFlag}`,
     };
   },
 
-  buildInteractiveArgs({ prompt }: AgentCommandOptions): string[] {
+  buildInteractiveArgs({
+    prompt,
+    resumeSession,
+    forkSession,
+    dangerouslySkipPermissions,
+  }: AgentCommandOptions): string[] {
+    if (forkSession)
+      throw new Error(
+        "Copilot session forking is not supported; use resume without forkSession.",
+      );
     const args = ["copilot", "--model", model];
+    if (dangerouslySkipPermissions)
+      args.push("--allow-all-tools", "--allow-all-paths", "--allow-all-urls");
+    if (options?.effort) args.push("--reasoning-effort", options.effort);
+    if (resumeSession) args.push(`--resume=${resumeSession}`);
     // Seed the interactive session with `-i`/`--interactive`, NOT `-p`. The
     // `-p`/`--prompt` flag runs the prompt programmatically and exits after
     // completion; since interactive() attaches these args to the real TTY,
