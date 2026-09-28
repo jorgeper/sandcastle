@@ -1,11 +1,19 @@
-import { exec } from "node:child_process";
-import { mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { exec, execFile } from "node:child_process";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const initRepo = async (dir: string) => {
   await execAsync("git init -b main", { cwd: dir });
@@ -52,6 +60,83 @@ describe("sandcastle CLI", () => {
     expect(stdout).toContain("build-image");
     expect(stdout).toContain("remove-image");
   });
+
+  it("docker build-image exposes an explicit npm registry option", async () => {
+    const { stdout } = await runCli("docker build-image --help", process.cwd());
+    expect(stdout).toContain("--npm-registry");
+  });
+
+  it.each([undefined, "https://registry.example.com/npm/"])(
+    "passes only an explicit registry to Docker while preserving UID build args: %s",
+    async (registry) => {
+      const cwd = await mkdtemp(join(tmpdir(), "cli-registry-"));
+      try {
+        await mkdir(join(cwd, ".sandcastle"));
+        const capture = join(cwd, "docker-args.json");
+        await writeFile(
+          join(cwd, "docker"),
+          `#!${process.execPath}\nrequire("node:fs").writeFileSync(${JSON.stringify(capture)}, JSON.stringify(process.argv.slice(2)));\n`,
+          { mode: 0o755 },
+        );
+        await execFileAsync(
+          process.execPath,
+          [
+            cliPath,
+            "docker",
+            "build-image",
+            ...(registry ? ["--npm-registry", registry] : []),
+          ],
+          {
+            cwd,
+            env: {
+              ...process.env,
+              PATH: `${cwd}${delimiter}${process.env.PATH}`,
+            },
+          },
+        );
+        const args: string[] = JSON.parse(await readFile(capture, "utf8"));
+        expect(args[0]).toBe("build");
+        expect(
+          args.filter((arg) => arg.startsWith("NPM_CONFIG_REGISTRY=")),
+        ).toEqual(registry ? [`NPM_CONFIG_REGISTRY=${registry}`] : []);
+        if (process.getuid)
+          expect(args).toContain(`AGENT_UID=${process.getuid()}`);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([
+    "not-a-url",
+    "http://registry.example.com/",
+    "https://user:private-token@registry.example.com/",
+    "https://registry.example.com/?token=private-token",
+    "https://registry.example.com/#private-token",
+  ])(
+    "rejects unsafe registry URLs without exposing their value: %s",
+    async (registry) => {
+      const cwd = await mkdtemp(join(tmpdir(), "cli-registry-invalid-"));
+      try {
+        await mkdir(join(cwd, ".sandcastle"));
+        const result = await execFileAsync(
+          process.execPath,
+          [cliPath, "docker", "build-image", "--npm-registry", registry],
+          { cwd },
+        ).then(
+          () => {
+            throw new Error("Expected invalid registry to fail");
+          },
+          (error: { stdout: string; stderr: string }) =>
+            error.stdout + error.stderr,
+        );
+        expect(result).toContain("--npm-registry must be an HTTPS URL");
+        expect(result).not.toContain("private-token");
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("docker build-image errors when .sandcastle/ is missing", async () => {
     const hostDir = await mkdtemp(join(tmpdir(), "cli-host-"));

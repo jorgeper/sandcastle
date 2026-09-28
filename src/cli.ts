@@ -40,7 +40,7 @@ import {
   resolveToolchain,
   TOOLCHAIN_NAMES,
 } from "./Toolchain.js";
-import { ConfigDirError, InitError } from "./errors.js";
+import { ConfigDirError, DockerError, InitError } from "./errors.js";
 import { VERSION } from "./version.js";
 
 // --- Shared options ---
@@ -666,8 +666,14 @@ const buildImageCommand = Command.make(
   {
     imageName: imageNameOption,
     dockerfile: dockerfileOption,
+    npmRegistry: Options.text("npm-registry").pipe(
+      Options.withDescription(
+        "Credential-free HTTPS npm registry passed as the NPM_CONFIG_REGISTRY build argument",
+      ),
+      Options.optional,
+    ),
   },
-  ({ imageName: imageNameFlag, dockerfile }) =>
+  ({ imageName: imageNameFlag, dockerfile, npmRegistry }) =>
     Effect.gen(function* () {
       const d = yield* Display;
       const cwd = process.cwd();
@@ -678,12 +684,35 @@ const buildImageCommand = Command.make(
       const dockerfileDir = join(cwd, CONFIG_DIR);
       const dockerfilePath =
         dockerfile._tag === "Some" ? dockerfile.value : undefined;
+      const buildArgs = defaultUidBuildArgs();
+      if (Option.isSome(npmRegistry)) {
+        buildArgs.NPM_CONFIG_REGISTRY = yield* Effect.try({
+          try: () => {
+            const url = new URL(npmRegistry.value);
+            if (
+              url.protocol !== "https:" ||
+              url.username ||
+              url.password ||
+              url.search ||
+              url.hash
+            ) {
+              throw new Error("Unsafe registry URL");
+            }
+            return url.href;
+          },
+          catch: () =>
+            new DockerError({
+              message:
+                "--npm-registry must be an HTTPS URL without credentials, query parameters, or a fragment. Never pass tokens as build arguments.",
+            }),
+        });
+      }
 
       yield* d.spinner(
         `Building Docker image '${imageName}'...`,
         buildImage(imageName, dockerfileDir, {
           dockerfile: dockerfilePath,
-          buildArgs: defaultUidBuildArgs(),
+          buildArgs,
         }),
       );
 

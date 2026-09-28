@@ -958,10 +958,18 @@ Errors if `.sandcastle/` already exists to prevent overwriting customizations.
 
 Rebuilds the Docker image from an existing `.sandcastle/` directory. Use this after modifying the Dockerfile. On Linux/macOS, the build automatically passes `--build-arg AGENT_UID=$(id -u)` and `AGENT_GID=$(id -g)` so the image's `agent` user matches the host UID — this prevents permission errors on image-built files without runtime chown.
 
-| Option         | Required | Default                      | Description                                                                       |
-| -------------- | -------- | ---------------------------- | --------------------------------------------------------------------------------- |
-| `--image-name` | No       | `sandcastle:<repo-dir-name>` | Docker image name                                                                 |
-| `--dockerfile` | No       | —                            | Path to a custom Dockerfile (build context will be the current working directory) |
+| Option           | Required | Default                      | Description                                                                       |
+| ---------------- | -------- | ---------------------------- | --------------------------------------------------------------------------------- |
+| `--image-name`   | No       | `sandcastle:<repo-dir-name>` | Docker image name                                                                 |
+| `--dockerfile`   | No       | —                            | Path to a custom Dockerfile (build context will be the current working directory) |
+| `--npm-registry` | No       | Dockerfile default           | Credential-free HTTPS registry passed as `NPM_CONFIG_REGISTRY` during the build   |
+
+For an approved npm mirror, run `sandcastle docker build-image --npm-registry https://registry.example.com/npm/`.
+The Dockerfile must declare `ARG NPM_CONFIG_REGISTRY=https://registry.npmjs.org/`
+before its npm/npx install steps. Host npm configuration is not copied automatically.
+The option rejects URL credentials, query parameters, fragments, and non-HTTPS
+URLs: build arguments are not a secret store. It does not configure a general
+network proxy or runtime registry, and does not affect non-npm downloads.
 
 ### `sandcastle docker remove-image`
 
